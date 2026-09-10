@@ -1,10 +1,12 @@
 #include "entry_page.h"
+#include "../../db/cms_themes.h"
 #include "../../utils/category_tags.h"
 #include "../../utils/image_size.h"
 #include "../../utils/detect_epoch.h"
 #include "../../utils/generate_url_theme.h"
 #include "../../utils/qr_generator/qr_generator.h"
 #include "../../utils/read_file.h"
+#include "../../utils/request_theme.h"
 #include "../../utils/template_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,6 +70,17 @@ static char *render_title(const CmsContentBlock *block, int epoch) {
     char *result;
     if (epoch == EPOCH_WML) {
         result = render_template(tpl, block->text);
+    } else if (epoch == EPOCH_EARLY) {
+        // No stylesheet here, so - like render_paragraph()'s epoch 1/2 case -
+        // the title's color has to be a real attribute rather than a CSS
+        // class nothing defines. Was hardcoded to white, unreadable on
+        // light-background themes; now takes the theme's own
+        // home-content-text color, the same "Home content" setting
+        // render_paragraph() reads.
+        const char *level = heading_level(block->extra_data);
+        CmsThemeColors colors;
+        cms_get_theme_colors(request_theme(), &colors);
+        result = render_template(tpl, level, colors.home_content_text, block->text, level);
     } else {
         const char *level = heading_level(block->extra_data);
         result = render_template(tpl, level, block->text, level);
@@ -187,9 +200,17 @@ static char *render_paragraph(const CmsContentBlock *block, int epoch) {
     } else if (epoch < EPOCH_MODERN) {
         // No stylesheet here, so the "note" variant has to be a real colour
         // attribute rather than a CSS class nothing defines - the class alone
-        // was a silent no-op on these epochs.
-        const char *color = (block->extra_data && strcmp(block->extra_data, "note") == 0)
-            ? "#deb887" : "#FFFFFF";
+        // was a silent no-op on these epochs. A plain paragraph takes the
+        // theme's own home-content-text color instead of a hardcoded white,
+        // which read as unreadable on light-background themes.
+        CmsThemeColors colors;
+        const char *color;
+        if (block->extra_data && strcmp(block->extra_data, "note") == 0) {
+            color = "#deb887";
+        } else {
+            cms_get_theme_colors(request_theme(), &colors);
+            color = colors.home_content_text;
+        }
         result = render_template(tpl, color, text);
     } else {
         char mod[64];

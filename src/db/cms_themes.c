@@ -4,6 +4,7 @@
 #include "../utils/log.h"
 #include <bson/bson.h>
 #include <mongoc/mongoc.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -44,6 +45,8 @@ static const ThemeDefaultEntry THEME_DEFAULTS[] = {
             .blog_list_item_author     = "#dfd106",
             .blog_list_item_categories = "#98ffdd",
             .blog_list_item_date       = "#e68e4e",
+            .footer_logo               = "#ffffff",
+            .footer_logo_background    = "#000000",
         },
     },
     // Values from the project's Figma file, "Color palette Light" variable
@@ -64,6 +67,8 @@ static const ThemeDefaultEntry THEME_DEFAULTS[] = {
             .blog_list_item_author     = "#cb5600",
             .blog_list_item_categories = "#0076c0",
             .blog_list_item_date       = "#00636a",
+            .footer_logo               = "#ffffff",
+            .footer_logo_background    = "#000000",
         },
     },
 };
@@ -177,6 +182,8 @@ int cms_get_theme_colors(const char *key, CmsThemeColors *out) {
             copy_field(&colors, "blog-list-item-author", out->blog_list_item_author, sizeof(out->blog_list_item_author));
             copy_field(&colors, "blog-list-item-categories", out->blog_list_item_categories, sizeof(out->blog_list_item_categories));
             copy_field(&colors, "blog-list-item-date", out->blog_list_item_date, sizeof(out->blog_list_item_date));
+            copy_field(&colors, "footer-logo", out->footer_logo, sizeof(out->footer_logo));
+            copy_field(&colors, "footer-logo-background", out->footer_logo_background, sizeof(out->footer_logo_background));
         }
     }
 
@@ -214,6 +221,8 @@ int cms_update_theme_colors(const char *key, const CmsThemeColors *colors) {
                 "blog-list-item-author", BCON_UTF8(colors->blog_list_item_author),
                 "blog-list-item-categories", BCON_UTF8(colors->blog_list_item_categories),
                 "blog-list-item-date", BCON_UTF8(colors->blog_list_item_date),
+                "footer-logo", BCON_UTF8(colors->footer_logo),
+                "footer-logo-background", BCON_UTF8(colors->footer_logo_background),
             "}",
         "}"
     );
@@ -324,4 +333,51 @@ int cms_update_theme_banner(const char *key, int epoch, const char *html) {
 
 int cms_update_theme_footer(const char *key, int epoch, const char *html) {
     return update_theme_epoch_field(key, "footer_html", epoch, html);
+}
+
+static int is_hex_digit(char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+void cms_split_hex_alpha(const char *stored, char *rgb_out, int *alpha_pct_out) {
+    size_t len = stored ? strlen(stored) : 0;
+    bool valid_rgb = len >= 7 && stored[0] == '#';
+    for (size_t i = 1; valid_rgb && i < 7; i++)
+        if (!is_hex_digit(stored[i])) valid_rgb = false;
+
+    if (!valid_rgb) {
+        strcpy(rgb_out, "#000000");
+        *alpha_pct_out = 100;
+        return;
+    }
+
+    memcpy(rgb_out, stored, 7);
+    rgb_out[7] = '\0';
+
+    bool valid_alpha = len == 9 && is_hex_digit(stored[7]) && is_hex_digit(stored[8]);
+    if (!valid_alpha) {
+        *alpha_pct_out = 100;
+        return;
+    }
+
+    unsigned int alpha_byte = (unsigned int)strtoul(stored + 7, NULL, 16);
+    *alpha_pct_out = (int)((alpha_byte * 100 + 127) / 255);
+}
+
+void cms_join_hex_alpha(const char *rgb_hex, int alpha_pct, char *out, size_t out_size) {
+    if (alpha_pct < 0) alpha_pct = 0;
+    if (alpha_pct > 100) alpha_pct = 100;
+
+    size_t len = rgb_hex ? strlen(rgb_hex) : 0;
+    bool valid_rgb = len == 7 && rgb_hex[0] == '#';
+    for (size_t i = 1; valid_rgb && i < 7; i++)
+        if (!is_hex_digit(rgb_hex[i])) valid_rgb = false;
+    if (!valid_rgb) rgb_hex = "#000000";
+
+    if (alpha_pct >= 100) {
+        snprintf(out, out_size, "%s", rgb_hex);
+    } else {
+        unsigned int alpha_byte = (alpha_pct * 255 + 50) / 100;
+        snprintf(out, out_size, "%s%02x", rgb_hex, alpha_byte);
+    }
 }

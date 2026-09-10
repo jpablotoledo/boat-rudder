@@ -1,8 +1,11 @@
 #include "home_content.h"
 #include "../entry_page/entry_page.h"
 #include "../../db/cms_entries.h"
+#include "../../db/cms_themes.h"
+#include "../../utils/detect_epoch.h"
 #include "../../utils/generate_url_theme.h"
 #include "../../utils/read_file.h"
+#include "../../utils/request_theme.h"
 #include "../../utils/template_utils.h"
 #include <stdlib.h>
 #include <string.h>
@@ -33,9 +36,20 @@ static char *render_static_items(int epoch) {
     free(item_path);
     if (!item_tpl) return NULL;
 
+    // No stylesheet on epoch 1, so its item template's text color has to be
+    // a real attribute rather than a CSS class nothing defines - was
+    // hardcoded to white, unreadable on light-background themes; now takes
+    // the theme's own home-content-text color (the "Home content" setting).
+    int needs_color = (epoch == EPOCH_EARLY);
+    CmsThemeColors colors;
+    if (needs_color) cms_get_theme_colors(request_theme(), &colors);
+
     char *items = strdup("");
     for (size_t i = 0; items && i < UPDATE_COUNT; i++) {
-        char *item = render_template(item_tpl, UPDATES[i].title, UPDATES[i].date, UPDATES[i].text);
+        char *item = needs_color
+            ? render_template(item_tpl, colors.home_content_text,
+                               UPDATES[i].title, UPDATES[i].date, UPDATES[i].text)
+            : render_template(item_tpl, UPDATES[i].title, UPDATES[i].date, UPDATES[i].text);
         items = item ? str_append(items, item) : NULL;
         free(item);
     }
@@ -61,7 +75,21 @@ char *home_content(int epoch, const char *lang) {
     if (!items)
         items = render_static_items(epoch);
 
-    char *result = items ? render_template(content_tpl, items) : NULL;
+    // Epoch 2 only: its container has a bgcolor attribute with no CSS to
+    // lean on (epoch 3's equivalent is transparent, showing the body's own
+    // background - see styles_epoch3.css's .boat-rudder__page-entry__
+    // container), so it takes body-background straight as a second %s -
+    // see home-content_epoch2.html.
+    char *result = NULL;
+    if (items) {
+        if (epoch == EPOCH_MIDDLE) {
+            CmsThemeColors colors;
+            cms_get_theme_colors(request_theme(), &colors);
+            result = render_template(content_tpl, colors.body_background, items);
+        } else {
+            result = render_template(content_tpl, items);
+        }
+    }
 
     free(content_tpl);
     free(items);

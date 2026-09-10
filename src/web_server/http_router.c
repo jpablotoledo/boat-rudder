@@ -537,6 +537,20 @@ static int parse_urlencoded_field(const char *body, int body_length, const char 
     return 0;
 }
 
+// A background color field posts as two inputs - an <input type="color">
+// (`color_key`) and an opacity percentage <input type="number">
+// (`alpha_key`) - joined here into the single stored "#rrggbb[aa]" value via
+// cms_join_hex_alpha(). Missing/unparseable fields fall back to opaque black
+// (cms_join_hex_alpha()'s own invalid-input fallback) and 100% opacity.
+static void parse_bg_color_field(const char *body, int body_length, const char *color_key,
+                                  const char *alpha_key, char *out, size_t out_size) {
+    char rgb[8] = "#000000";
+    char alpha_str[8] = "100";
+    parse_urlencoded_field(body, body_length, color_key, rgb, sizeof(rgb));
+    parse_urlencoded_field(body, body_length, alpha_key, alpha_str, sizeof(alpha_str));
+    cms_join_hex_alpha(rgb, atoi(alpha_str), out, out_size);
+}
+
 // Like parse_urlencoded_field(), but collects every value for `key` (not just
 // the first), e.g. repeated "categories=..." fields from a
 // <select multiple>. Each out_values[i] is malloc'd (caller must free).
@@ -2430,8 +2444,9 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                         send_error_response(ctx, 404, "404 Not Found", epoch);
                     } else {
                         CmsThemeColors colors = {0};
-                        parse_urlencoded_field(req.body, req.body_length, "navbar-background",
-                                                colors.navbar_background, sizeof(colors.navbar_background));
+                        parse_bg_color_field(req.body, req.body_length, "navbar-background",
+                                             "navbar-background-alpha",
+                                             colors.navbar_background, sizeof(colors.navbar_background));
                         parse_urlencoded_field(req.body, req.body_length, "navbar-menu-normal",
                                                 colors.navbar_menu_normal, sizeof(colors.navbar_menu_normal));
                         parse_urlencoded_field(req.body, req.body_length, "navbar-menu-hover",
@@ -2440,14 +2455,17 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                                                 colors.navbar_menu_active, sizeof(colors.navbar_menu_active));
                         parse_urlencoded_field(req.body, req.body_length, "navbar-logo",
                                                 colors.navbar_logo, sizeof(colors.navbar_logo));
-                        parse_urlencoded_field(req.body, req.body_length, "body-background",
-                                                colors.body_background, sizeof(colors.body_background));
-                        parse_urlencoded_field(req.body, req.body_length, "home-content-background",
-                                                colors.home_content_background, sizeof(colors.home_content_background));
+                        parse_bg_color_field(req.body, req.body_length, "body-background",
+                                             "body-background-alpha",
+                                             colors.body_background, sizeof(colors.body_background));
+                        parse_bg_color_field(req.body, req.body_length, "home-content-background",
+                                             "home-content-background-alpha",
+                                             colors.home_content_background, sizeof(colors.home_content_background));
                         parse_urlencoded_field(req.body, req.body_length, "home-content-text",
                                                 colors.home_content_text, sizeof(colors.home_content_text));
-                        parse_urlencoded_field(req.body, req.body_length, "blog-list-item-background",
-                                                colors.blog_list_item_background, sizeof(colors.blog_list_item_background));
+                        parse_bg_color_field(req.body, req.body_length, "blog-list-item-background",
+                                             "blog-list-item-background-alpha",
+                                             colors.blog_list_item_background, sizeof(colors.blog_list_item_background));
                         parse_urlencoded_field(req.body, req.body_length, "blog-list-item-border",
                                                 colors.blog_list_item_border, sizeof(colors.blog_list_item_border));
                         parse_urlencoded_field(req.body, req.body_length, "blog-list-item-author",
@@ -2456,6 +2474,11 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                                                 colors.blog_list_item_categories, sizeof(colors.blog_list_item_categories));
                         parse_urlencoded_field(req.body, req.body_length, "blog-list-item-date",
                                                 colors.blog_list_item_date, sizeof(colors.blog_list_item_date));
+                        parse_urlencoded_field(req.body, req.body_length, "footer-logo",
+                                                colors.footer_logo, sizeof(colors.footer_logo));
+                        parse_bg_color_field(req.body, req.body_length, "footer-logo-background",
+                                             "footer-logo-background-alpha",
+                                             colors.footer_logo_background, sizeof(colors.footer_logo_background));
 
                         cms_update_theme_colors(id, &colors);
                         char *response = build_redirect_response("/dashboard/settings/themes", "", epoch);

@@ -65,6 +65,7 @@ static char *splice_theme_colors(char *html) {
         "--br-color-blog-list-item-background:%s;--br-color-blog-list-item-border:%s;"
         "--br-color-blog-list-item-author:%s;--br-color-blog-list-item-categories:%s;"
         "--br-color-blog-list-item-date:%s;"
+        "--br-color-footer-logo:%s;--br-color-footer-logo-background:%s;"
         "}</style>",
         colors.navbar_background, colors.navbar_menu_normal,
         colors.navbar_menu_hover, colors.navbar_menu_active,
@@ -72,7 +73,8 @@ static char *splice_theme_colors(char *html) {
         colors.home_content_background, colors.home_content_text,
         colors.blog_list_item_background, colors.blog_list_item_border,
         colors.blog_list_item_author, colors.blog_list_item_categories,
-        colors.blog_list_item_date);
+        colors.blog_list_item_date,
+        colors.footer_logo, colors.footer_logo_background);
 
     char *result = str_replace_first(html, "{{THEME_COLORS}}", style ? style : "");
     free(style);

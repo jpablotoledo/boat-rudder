@@ -125,6 +125,22 @@ char *site_settings_preview_page(int epoch) {
     return load_template("dashboard/settings/preview_epoch%d.html", epoch);
 }
 
+// Splits a stored background value into the two form fields it renders as:
+// an <input type="color"> value (opaque "#rrggbb") and an opacity-percentage
+// <input type="range"> value, using cms_split_hex_alpha().
+typedef struct {
+    char rgb[8];
+    char alpha[4];
+} BgColorForm;
+
+static BgColorForm split_bg(const char *stored) {
+    BgColorForm f;
+    int alpha_pct;
+    cms_split_hex_alpha(stored, f.rgb, &alpha_pct);
+    snprintf(f.alpha, sizeof(f.alpha), "%d", alpha_pct);
+    return f;
+}
+
 char *site_settings_themes_page(int epoch, const ThemeEntry *themes, size_t count) {
     char *page_tpl     = load_template("dashboard/settings/settings-themes_epoch%d.html", epoch);
     char *panel_tpl    = load_template("dashboard/settings/settings-themes-panel_epoch%d.html", epoch);
@@ -145,17 +161,24 @@ char *site_settings_themes_page(int epoch, const ThemeEntry *themes, size_t coun
         }
 
         const CmsThemeColors *c = &themes[i].colors;
+        BgColorForm navbar_bg     = split_bg(c->navbar_background);
+        BgColorForm body_bg       = split_bg(c->body_background);
+        BgColorForm home_bg       = split_bg(c->home_content_background);
+        BgColorForm blog_item_bg  = split_bg(c->blog_list_item_background);
+        BgColorForm footer_bg     = split_bg(c->footer_logo_background);
+
         char *panel = render_template(panel_tpl, themes[i].key,
                                        themes[i].active ? " (active)" : "", activate,
                                        themes[i].key,
-                                       c->navbar_background, c->navbar_menu_normal,
+                                       navbar_bg.rgb, navbar_bg.alpha, c->navbar_menu_normal,
                                        c->navbar_menu_hover, c->navbar_menu_active,
                                        c->navbar_logo,
-                                       c->body_background,
-                                       c->home_content_background, c->home_content_text,
-                                       c->blog_list_item_background, c->blog_list_item_border,
+                                       body_bg.rgb, body_bg.alpha,
+                                       home_bg.rgb, home_bg.alpha, c->home_content_text,
+                                       blog_item_bg.rgb, blog_item_bg.alpha, c->blog_list_item_border,
                                        c->blog_list_item_author, c->blog_list_item_categories,
                                        c->blog_list_item_date,
+                                       c->footer_logo, footer_bg.rgb, footer_bg.alpha,
                                        themes[i].key, themes[i].key);
         free(activate);
         if (!panel) {

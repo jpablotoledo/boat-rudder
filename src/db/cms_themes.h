@@ -2,9 +2,13 @@
 #define CMS_THEMES_H
 
 #include "../utils/detect_epoch.h"
+#include <stddef.h>
 
 // A theme's DB-editable color tokens - the 13 variables defined in the
-// project's Figma file ("Color palette Dark"/"Color palette Light"), one
+// project's Figma file ("Color palette Dark"/"Color palette Light"), plus
+// footer_logo/footer_logo_background (epoch 3 only - the ".boat-rudder__
+// footer-title" bar has no epoch 1/2 equivalent to substitute into, those
+// epochs render the footer as plain images), one
 // shared palette for every epoch that has a concept of color at all (1, 2
 // and 3), not split per epoch. How each value actually reaches the page
 // differs by epoch, since epoch 1/2 have no CSS custom properties (epoch 1:
@@ -19,20 +23,30 @@
 // per theme key that an admin has actually customized from
 // /dashboard/settings/themes - a theme with no document just keeps its own
 // Figma-defined defaults (see cms_themes.c's THEME_DEFAULTS).
+// The 5 *_background fields below carry an optional alpha channel -
+// "#rrggbb" (opaque, the historical format) or "#rrggbbaa" - since epoch 3's
+// CSS custom properties happily accept 8-digit hex and every background use
+// site is a CSS background-color; epoch 1/2 have no alpha concept (plain
+// bgcolor attributes), so this only ever matters for epoch 3. The extra 2
+// bytes in these fields' size (10 vs 8) is exactly room for "aa". The admin
+// form (settings-themes-panel_epoch3.html) splits/joins this with a
+// separate opacity slider - see site_settings_admin.c's hex helpers.
 typedef struct {
-    char navbar_background[8];          // "#rrggbb" - navbar container background
+    char navbar_background[10];         // "#rrggbb[aa]" - navbar container background
     char navbar_menu_normal[8];         // menu item link color, unvisited/no interaction
     char navbar_menu_hover[8];          // menu item link color, :hover
     char navbar_menu_active[8];         // menu item link color, current page
     char navbar_logo[8];                // site name/logo text color
-    char body_background[8];            // page body background
-    char home_content_background[8];    // "Welcome" home-content section background
+    char body_background[10];           // "#rrggbb[aa]" - page body background
+    char home_content_background[10];   // "#rrggbb[aa]" - "Welcome" home-content section background
     char home_content_text[8];          // home-content section text
-    char blog_list_item_background[8];  // each blog listing card's background
+    char blog_list_item_background[10]; // "#rrggbb[aa]" - each blog listing card's background
     char blog_list_item_border[8];      // blog listing card border (epoch 1 has no box to border)
     char blog_list_item_author[8];      // blog listing card byline author name
     char blog_list_item_categories[8];  // category tag color/background
     char blog_list_item_date[8];        // blog listing card byline date
+    char footer_logo[8];                // footer bar "Boat Rudder" text color (epoch 3 only)
+    char footer_logo_background[10];    // "#rrggbb[aa]" - footer bar background behind that text (epoch 3 only)
 } CmsThemeColors;
 
 // db.themes.findOne({key}). Fills `out` with the stored colors, or with
@@ -80,5 +94,19 @@ void cms_get_theme_footer_values(const char *key, char *out_values[EPOCH_COUNT])
 // epoch back to the theme's on-disk default.
 int cms_update_theme_banner(const char *key, int epoch, const char *html);
 int cms_update_theme_footer(const char *key, int epoch, const char *html);
+
+// Splits a stored "#rrggbb" or "#rrggbbaa" background value into its opaque
+// 7-char hex ("#rrggbb", for an <input type="color"> value - that control
+// has no alpha concept) and an opacity percentage 0-100 (100 when `stored`
+// carries no alpha byte, or isn't a recognizable hex color at all).
+// rgb_out must be >= 8 bytes.
+void cms_split_hex_alpha(const char *stored, char *rgb_out, int *alpha_pct_out);
+
+// The inverse of cms_split_hex_alpha(): joins a "#rrggbb" color and an
+// opacity percentage (clamped to 0-100) back into a stored background
+// value. Emits plain "#rrggbb" for alpha_pct >= 100 (keeps fully-opaque
+// values in the historical 7-char format) or "#rrggbbaa" otherwise.
+// out_size must be >= 10.
+void cms_join_hex_alpha(const char *rgb_hex, int alpha_pct, char *out, size_t out_size);
 
 #endif // CMS_THEMES_H

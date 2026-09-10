@@ -340,6 +340,28 @@ h2 {
   border: 1px solid #00ff40;
 }
 
+.boat-rudder__dashboard__color-alpha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.boat-rudder__dashboard__color-alpha__range {
+  width: 120px;
+}
+
+.boat-rudder__dashboard__color-alpha__preview {
+  --boat-rudder-preview-color: transparent;
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #2a9d8f;
+  background-image: linear-gradient(var(--boat-rudder-preview-color), var(--boat-rudder-preview-color)),
+                     repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%);
+  background-size: 100% 100%, 8px 8px;
+}
+
 .boat-rudder__dashboard__theme-badge {
   display: inline-block;
   padding: 4px 10px;
@@ -522,7 +544,8 @@ h2 {
 }
 
 .boat-rudder__footer-title {
-  background-color: rgba(0, 0, 0, 0.77);
+  background-color: var(--br-color-footer-logo-background, #000000);
+  color: var(--br-color-footer-logo, #ffffff);
   padding: 10px;
   width: 100%;
   font-family: Milonga;
@@ -1599,6 +1622,15 @@ a.boat-rudder__social-network img { border-radius: 4px; flex-shrink: 0; }
 }
 .boat-rudder__language__item:hover { background: #e2e2e4; color: #1a1a1a; }
 .boat-rudder__language__item--active { color: #56e9fd; font-weight: bold; }
+
+.boat-rudder__theme { max-width: 480px; margin: 40px auto; }
+.boat-rudder__theme__list { display: flex; flex-direction: column; gap: 2px; }
+.boat-rudder__theme__item {
+  display: block; padding: 10px 14px; color: #d4d4d4; text-decoration: none;
+  border: 1px solid #e2e2e4; border-radius: 3px; text-transform: capitalize;
+}
+.boat-rudder__theme__item:hover { background: #e2e2e4; color: #1a1a1a; }
+.boat-rudder__theme__item--active { color: var(--br-color-navbar-menu-active, #3800aa); font-weight: bold; }
 
 /*XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 /* RESPONSIVE */

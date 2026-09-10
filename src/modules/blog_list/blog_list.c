@@ -116,8 +116,19 @@ static char *render_list(int epoch, const char *lang, const char *heading,
     else
         cms_get_blog_entries(lang, limit, &entries, &entry_count);
 
+    // No stylesheet on epoch 1, so both the heading and the "no entries"
+    // message's text color have to be a real attribute - were hardcoded
+    // white, unreadable on light-background themes; now take the theme's
+    // own home-content-text color (the "Home content" setting).
+    int needs_color = (epoch == EPOCH_EARLY);
+    CmsThemeColors colors;
+    if (needs_color) cms_get_theme_colors(request_theme(), &colors);
+
     if (entry_count == 0) {
-        items = load_template("home-blog/empty_epoch%d.html", epoch);
+        char *empty_tpl = load_template("home-blog/empty_epoch%d.html", epoch);
+        items = needs_color && empty_tpl ? render_template(empty_tpl, colors.home_content_text)
+                                          : empty_tpl;
+        if (needs_color) free(empty_tpl);
     } else {
         items = strdup("");
         for (size_t i = 0; items && i < entry_count; i++) {
@@ -127,7 +138,11 @@ static char *render_list(int epoch, const char *lang, const char *heading,
         }
     }
 
-    if (items) result = render_template(content_tpl, heading, items);
+    if (items) {
+        result = needs_color
+            ? render_template(content_tpl, colors.home_content_text, heading, items)
+            : render_template(content_tpl, heading, items);
+    }
 
 cleanup:
     cms_blog_list_free(entries, entry_count);

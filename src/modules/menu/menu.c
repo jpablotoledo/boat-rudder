@@ -3,6 +3,7 @@
 #include "../../db/language_catalog.h"
 #include "../../db/cms_menu.h"
 #include "../../db/cms_site_settings.h"
+#include "../../db/cms_themes.h"
 #include "../../db/mongodb_manager.h"
 #include "../../utils/detect_epoch.h"
 #include "../../utils/generate_url_theme.h"
@@ -239,12 +240,35 @@ char *menu(const char *current_url, int epoch) {
         goto cleanup;
     }
 
+    // Epoch 1/2's selected-item template has no CSS to lean on (epoch 3's
+    // equivalent just uses the boat-rudder__navbar__menu_item--selected
+    // class, already wired to --br-color-navbar-menu-active), so the
+    // current-page highlight color is substituted straight into a <font
+    // color> attribute here - see menu-item-selected_epoch{1,2}.html. Epoch
+    // 1's *un*selected item has the same problem (no <body link=...>-style
+    // fallback of its own the way epoch 2's does - see
+    // menu-item_epoch{1,2}.html), so it takes navbar-menu-normal the same
+    // way; epoch 2's unselected item already inherits the theme-driven
+    // <body link="..."> color, so it is left alone.
+    int needs_active_color = (epoch == EPOCH_EARLY || epoch == EPOCH_MIDDLE);
+    CmsThemeColors colors;
+    if (needs_active_color) cms_get_theme_colors(request_theme(), &colors);
+
     for (size_t i = 0; i < item_count; i++) {
         const char *sep = (i + 1 < item_count) ? separator : "";
 
         int is_selected = current_url && strcmp(current_url, menu_items[i].link) == 0;
         const char *tpl = is_selected ? selected_item_tpl : menu_item_tpl;
-        char *item = render_template(tpl, menu_items[i].link, menu_items[i].name, sep);
+        char *item;
+        if (is_selected && needs_active_color) {
+            item = render_template(tpl, menu_items[i].link, colors.navbar_menu_active,
+                                    menu_items[i].name, sep);
+        } else if (!is_selected && epoch == EPOCH_EARLY) {
+            item = render_template(tpl, menu_items[i].link, colors.navbar_menu_normal,
+                                    menu_items[i].name, sep);
+        } else {
+            item = render_template(tpl, menu_items[i].link, menu_items[i].name, sep);
+        }
         if (!item) {
             cms_menu_free(db_items, db_count);
             goto cleanup;

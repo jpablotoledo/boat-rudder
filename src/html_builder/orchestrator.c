@@ -1,5 +1,6 @@
 #include "orchestrator.h"
 #include "page_layout.h"
+#include "../db/cms_themes.h"
 #include "../utils/detect_epoch.h"
 #include "../modules/blog_list/blog_list.h"
 #include "../modules/home_content/home_content.h"
@@ -7,6 +8,7 @@
 #include "../modules/mainbanner/mainbanner.h"
 #include "../utils/generate_url_theme.h"
 #include "../utils/read_file.h"
+#include "../utils/request_theme.h"
 #include "../utils/template_utils.h"
 #include <stdlib.h>
 #include <string.h>
@@ -53,7 +55,18 @@ char *buildPageWebSiteAtUrl(int epoch, const char *page_title, char *html_conten
 
     char *result = NULL;
     if (raw && html_menu && html_content) {
-        char *fragment = render_template(raw, html_menu, html_content);
+        char *fragment;
+        // Epoch 2 only: page_epoch2.html's .boat-rudder__page-entry__
+        // container carries its own bgcolor attribute with no CSS to lean
+        // on - epoch 3's equivalent is transparent to the body background
+        // instead (see styles_epoch3.css) - so it takes an extra %s here.
+        if (epoch == EPOCH_MIDDLE) {
+            CmsThemeColors colors;
+            cms_get_theme_colors(request_theme(), &colors);
+            fragment = render_template(raw, html_menu, colors.body_background, html_content);
+        } else {
+            fragment = render_template(raw, html_menu, html_content);
+        }
         result = page_layout_wrap(fragment, page_title, epoch, NULL);
     }
 
@@ -68,10 +81,17 @@ char *buildPageWebSite(int epoch, const char *page_title, char *html_content) {
     return buildPageWebSiteAtUrl(epoch, page_title, html_content, "/");
 }
 
+// `has_container_bg`: whether `tpl_fmt` is the page-entry variant, whose
+// .boat-rudder__page-entry__container carries its own bgcolor attribute
+// (see buildPageWebSiteAtUrl()'s comment above) - the page-blog variant's
+// wrapper has no such attribute, so buildBlogListWebSiteAtUrl() always
+// passes 0. Only actually matters at epoch 2 (checked below): epoch 3's
+// page-entry_epoch3.html is CSS-only, and every epoch < 2 falls back to
+// the plain page_epoch%d.html, neither of which has the extra %s.
 static char *build_blog_page_internal(const char *tpl_fmt, int epoch,
                                        const char *page_title, char *html_content,
                                        const char *current_url, char *category_menu_html,
-                                       const char *body_background) {
+                                       const char *body_background, int has_container_bg) {
     char *path = generate_url_theme(tpl_fmt, epoch);
     char *raw  = path ? read_file_to_string(path) : NULL;
     free(path);
@@ -98,7 +118,14 @@ static char *build_blog_page_internal(const char *tpl_fmt, int epoch,
 
     char *result = NULL;
     if (raw && combined_nav && html_content) {
-        char *fragment = render_template(raw, combined_nav, html_content);
+        char *fragment;
+        if (epoch == EPOCH_MIDDLE && has_container_bg) {
+            CmsThemeColors colors;
+            cms_get_theme_colors(request_theme(), &colors);
+            fragment = render_template(raw, combined_nav, colors.body_background, html_content);
+        } else {
+            fragment = render_template(raw, combined_nav, html_content);
+        }
         result = page_layout_wrap(fragment, page_title, epoch, body_background);
     }
 
@@ -117,12 +144,12 @@ char *buildBlogListWebSiteAtUrl(int epoch, const char *page_title, char *html_co
                                               : "page/page_epoch%d.html";
     // The listing shares home's backdrop; an article does not.
     return build_blog_page_internal(tpl, epoch, page_title, html_content, current_url,
-                                     category_menu_html, BODY_BACKDROP);
+                                     category_menu_html, BODY_BACKDROP, 0);
 }
 
 char *buildEntryWebSiteAtUrl(int epoch, const char *page_title, char *html_content,
                               const char *current_url, char *category_menu_html) {
     const char *tpl = (epoch >= 2) ? "page/page-entry_epoch%d.html" : "page/page_epoch%d.html";
     return build_blog_page_internal(tpl, epoch, page_title, html_content, current_url,
-                                     category_menu_html, NULL);
+                                     category_menu_html, NULL, epoch >= 2);
 }

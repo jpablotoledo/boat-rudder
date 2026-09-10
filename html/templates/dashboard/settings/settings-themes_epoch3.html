@@ -5,3 +5,30 @@
 %s
   <p><a href="/dashboard/settings">Back to site settings</a></p>
 </section>
+
+<script>
+(function () {
+  function hexToRgb(hex) {
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [0, 0, 0];
+  }
+
+  function update(widget) {
+    var color = widget.querySelector('.boat-rudder__dashboard__color-alpha__color');
+    var range = widget.querySelector('.boat-rudder__dashboard__color-alpha__range');
+    var preview = widget.querySelector('.boat-rudder__dashboard__color-alpha__preview');
+    if (!color || !range || !preview) return;
+    var rgb = hexToRgb(color.value);
+    var alpha = Number(range.value) / 100;
+    preview.style.setProperty('--boat-rudder-preview-color',
+      'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + alpha + ')');
+  }
+
+  Array.prototype.slice.call(document.querySelectorAll('.boat-rudder__dashboard__color-alpha')).forEach(function (widget) {
+    update(widget);
+    Array.prototype.slice.call(widget.querySelectorAll('input')).forEach(function (input) {
+      input.addEventListener('input', function () { update(widget); });
+    });
+  });
+})();
+</script>
