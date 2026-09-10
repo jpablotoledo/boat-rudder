@@ -1,7 +1,7 @@
 /* RESET */
 body {
-  background-color: var(--br-color-background, #000000);
-  color: var(--br-color-text, #ffffff);
+  background-color: var(--br-color-body-background, #241144);
+  color: var(--br-color-home-content-text, #ffffff);
   margin: 0;
   width: 100%;
   font-family: Arial, Helvetica, sans-serif;
@@ -14,7 +14,7 @@ a {
 a:link,
 a:visited,
 a:active {
-  color: var(--br-color-accent, #56e9fd);
+  color: var(--br-color-navbar-menu-normal, #ffffff);
 }
 
 h1 {
@@ -52,7 +52,7 @@ h2 {
   display: flex;
   justify-content: center;
   border-bottom: 1px solid #333333;
-  background-color: #000000;
+  background-color: var(--br-color-navbar-background, #241144);
   position: fixed;
   width: 100%;
   z-index: 99;
@@ -79,12 +79,12 @@ h2 {
 }
 
 .boat-rudder__navbar__title a {
-  color: #ffffff;
+  color: var(--br-color-navbar-logo, #ffffff);
 }
 
 .boat-rudder__navbar__title_onslidelogo {
   position: absolute;
-  color: #ffffff;
+  color: var(--br-color-navbar-logo, #ffffff);
   font-size: 6vw;
   z-index: 2;
   margin: 13vh auto;
@@ -115,7 +115,11 @@ h2 {
 }
 
 .boat-rudder__navbar__menu_item a {
-  color: #ffffff;
+  color: var(--br-color-navbar-menu-normal, #ffffff);
+}
+
+.boat-rudder__navbar__menu_item a:hover {
+  color: var(--br-color-navbar-menu-hover, #98ffdd);
 }
 
 .boat-rudder__navbar__menu_item:last-child {
@@ -123,7 +127,7 @@ h2 {
 }
 
 .boat-rudder__navbar__menu_item--selected a {
-  color: #56e9fd;
+  color: var(--br-color-navbar-menu-active, #00ffab);
 }
 
 /* The mobile dropdown's copy of the user link (menu-user-mobile_epoch3.html)
@@ -336,6 +340,17 @@ h2 {
   border: 1px solid #00ff40;
 }
 
+.boat-rudder__dashboard__theme-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  margin-bottom: 10px;
+  background-color: #003530;
+  border: 1px solid #00c832;
+  border-radius: 3px;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
 .boat-rudder__dashboard__error {
   width: 90%;
   max-width: 400px;
@@ -360,7 +375,8 @@ h2 {
 
 /* HOME CONTENT */
 .boat-rudder__home-content {
-  background-color: #00000080;
+  background-color: var(--br-color-home-content-background, #170c29);
+  color: var(--br-color-home-content-text, #ffffff);
   position: relative;
 }
 
@@ -408,9 +424,9 @@ h2 {
 }
 
 .boat-rudder__home-blog__item {
-  background-color: #0000006b;
+  background-color: var(--br-color-blog-list-item-background, #000000);
   padding: 20px;
-  border: 1px solid var(--br-color-border, #349b00);
+  border: 1px solid var(--br-color-blog-list-item-border, #00ffab);
   margin: 30px 0;
   display: flex;
 }
@@ -441,11 +457,11 @@ h2 {
 }
 
 .boat-rudder__home-blog__item__byline-owner {
-  color: var(--br-color-author, #f2e200);
+  color: var(--br-color-blog-list-item-author, #dfd106);
 }
 
 .boat-rudder__home-blog__item__byline-date {
-  color: var(--br-color-date, #f9964f);
+  color: var(--br-color-blog-list-item-date, #e68e4e);
 }
 
 .boat-rudder__home-blog__item__byline-categories {
@@ -497,7 +513,7 @@ h2 {
 .boat-rudder__footer {
   width: 100%;
   height: 280px;
-  background-image: url('/themes/dark/assets/footer/purple-grid_epoch3.jpg');
+  background-image: url('/themes/dark/assets/footer/grid_epoch3.jpg');
   background-repeat: no-repeat;
   background-size: cover;
   display: flex;
@@ -589,7 +605,7 @@ h2 {
 }
 
 .boat-rudder__entry-category {
-  background-color: var(--br-color-category, #349b00);
+  background-color: var(--br-color-blog-list-item-categories, #98ffdd);
   color: #ffffff;
   padding: 4px 10px;
   border-radius: 12px;
@@ -1551,7 +1567,29 @@ a.boat-rudder__social-network img { border-radius: 4px; flex-shrink: 0; }
   white-space: nowrap;
 }
 .boat-rudder__navbar__lang__item:hover { background: #2a2a2a; color: #fff; }
-.boat-rudder__navbar__lang__item--active { color: #56e9fd; font-weight: bold; }
+.boat-rudder__navbar__lang__item--active { color: var(--br-color-navbar-menu-active, #00ffab); font-weight: bold; }
+
+/* Theme switcher - same shape as the language drop-down above. */
+.boat-rudder__navbar__theme { position: relative; display: inline-block; }
+.boat-rudder__navbar__theme__btn {
+  background: none; border: 1px solid transparent; color: inherit;
+  font: inherit; padding: 4px 10px; cursor: pointer; border-radius: 3px;
+  text-transform: capitalize;
+}
+.boat-rudder__navbar__theme__btn:hover { border-color: currentColor; }
+.boat-rudder__navbar__theme__menu {
+  display: none; position: absolute; right: 0; top: 100%;
+  min-width: 160px; z-index: 50;
+  background: #1a1a1a; border: 1px solid #3a3a3a; border-radius: 4px;
+  padding: 4px 0;
+}
+.boat-rudder__navbar__theme.theme--open .boat-rudder__navbar__theme__menu { display: block; }
+.boat-rudder__navbar__theme__item {
+  display: block; padding: 6px 14px; color: #d4d4d4; text-decoration: none;
+  white-space: nowrap; text-transform: capitalize;
+}
+.boat-rudder__navbar__theme__item:hover { background: #2a2a2a; color: #fff; }
+.boat-rudder__navbar__theme__item--active { color: var(--br-color-navbar-menu-active, #00ffab); font-weight: bold; }
 
 .boat-rudder__language { max-width: 480px; margin: 40px auto; }
 .boat-rudder__language__list { display: flex; flex-direction: column; gap: 2px; }
@@ -1639,6 +1677,7 @@ a.boat-rudder__social-network img { border-radius: 4px; flex-shrink: 0; }
      so the selector stays right but gets tighter. */
   .boat-rudder__navbar__options { right: 8px; }
   .boat-rudder__navbar__lang__btn { padding: 4px 6px; font-size: 14px; }
+  .boat-rudder__navbar__theme__btn { padding: 4px 6px; font-size: 14px; }
 }
 
 @media (max-width: 768px) {
@@ -1663,4 +1702,6 @@ a.boat-rudder__social-network img { border-radius: 4px; flex-shrink: 0; }
 
   .boat-rudder__navbar__lang__btn { font-size: 13px; }
   .boat-rudder__navbar__lang__menu { min-width: 140px; }
+  .boat-rudder__navbar__theme__btn { font-size: 13px; }
+  .boat-rudder__navbar__theme__menu { min-width: 140px; }
 }

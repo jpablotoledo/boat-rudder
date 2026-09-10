@@ -22,15 +22,6 @@ static char *render_item(const CmsBlogListItem *item, const char *item_tpl, int 
                                                   item->category_count, epoch);
     if (!categories_html) return NULL;
 
-    // Harmless to fetch even for epoch 3 (whose home-blog-item_epoch3.html
-    // has no color placeholders to consume them - printf-style varargs
-    // beyond a format string's %s count are simply ignored) - epoch 1/2's
-    // item template substitutes these straight into <font color>/
-    // bordercolor attributes, having no CSS custom properties to fall back
-    // on. See develop_docs/plans/theme-system-plan.md's epoch 1/2 analysis.
-    CmsThemeColors retro;
-    cms_get_theme_colors(request_theme(), &retro);
-
     char *result;
     if (epoch >= EPOCH_EARLY) {
         char *link_url = render_template("/blog/%s", item->link);
@@ -43,15 +34,40 @@ static char *render_item(const CmsBlogListItem *item, const char *item_tpl, int 
             char *dot = strrchr(thumb, '.');
             if (dot) strcpy(dot, ".gif");
         }
-        result = (link_url && thumb)
-            ? render_template(item_tpl, thumb, link_url, item->header_title,
-                               item->header_summary,
-                               retro.author,
-                               item->header_hide_author ? "" : item->header_author,
-                               categories_html,
-                               retro.date, item->header_date,
-                               retro.border)
-            : NULL;
+
+        if (epoch == EPOCH_MODERN) {
+            // home-blog-item_epoch3.html carries its own color via CSS
+            // classes (boat-rudder__home-blog__item__byline-owner etc.) -
+            // no color arguments to insert. Unlike epoch 2's item template,
+            // this one addresses its %s slots sequentially, not by %N$s
+            // position, so passing the epoch 1/2 color arguments here would
+            // shift every slot after them - not merely "extra, ignored"
+            // varargs - and print a hex string where the author name goes.
+            result = (link_url && thumb)
+                ? render_template(item_tpl, thumb, link_url, item->header_title,
+                                   item->header_summary,
+                                   item->header_hide_author ? "" : item->header_author,
+                                   categories_html, item->header_date)
+                : NULL;
+        } else {
+            // Epoch 1/2 have no CSS custom properties (epoch 1: no CSS at
+            // all; epoch 2's inline <style> predates CSS3 variables), so
+            // the theme's colors go straight into <font color>/bordercolor
+            // attributes as %s substitutions instead. See
+            // develop_docs/plans/theme-system-plan.md's epoch 1/2 analysis.
+            CmsThemeColors retro;
+            cms_get_theme_colors(request_theme(), &retro);
+
+            result = (link_url && thumb)
+                ? render_template(item_tpl, thumb, link_url, item->header_title,
+                                   item->header_summary,
+                                   retro.blog_list_item_author,
+                                   item->header_hide_author ? "" : item->header_author,
+                                   categories_html,
+                                   retro.blog_list_item_date, item->header_date,
+                                   retro.blog_list_item_border)
+                : NULL;
+        }
         free(thumb);
         free(link_url);
     } else {

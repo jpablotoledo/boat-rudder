@@ -12,4 +12,15 @@
 // user_agent may be NULL or empty, in which case EPOCH_EARLY is returned.
 int detect_epoch(const char *user_agent);
 
+// Number of epochs (-1..3 inclusive) - the size of any array indexed by
+// epoch_to_index(), e.g. a theme's per-epoch banner/footer values.
+#define EPOCH_COUNT 5
+
+// Maps epoch (-1..3) to a 0..4 array index, or -1 if `epoch` is out of
+// that range. Was cms_site_settings_epoch_index() (site-personalization-
+// plan.md) before banner/footer moved to being theme-scoped - moved here
+// because it maps epochs generically, not anything specific to site
+// settings or themes.
+int epoch_to_index(int epoch);
+
 #endif // DETECT_EPOCH_H

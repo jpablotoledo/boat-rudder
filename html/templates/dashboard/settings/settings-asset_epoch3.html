@@ -1,10 +1,11 @@
 <section class="boat-rudder__dashboard">
   <h1>%s</h1>
+  <p class="boat-rudder__dashboard__theme-badge">Theme: <strong>%s</strong></p>
   <p>Raw markup, one field per epoch. Leave a field empty to fall back to the theme's
      default for that epoch. Upload an image below a field, then paste its path into
      the markup yourself (e.g. inside an <code>&lt;img src="..."&gt;</code>).</p>
 %s
-  <p><a href="/dashboard/settings">Back to site settings</a></p>
+  <p><a href="/dashboard/settings/themes">Back to themes</a></p>
 </section>
 
 <script>
@@ -12,18 +13,19 @@
   function qs(sel, root) { return (root || document).querySelector(sel); }
   function qsa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
 
-  function assetPath(component, epoch, name) {
-    return '/themes/dark/assets/' + component + '/epoch' + epoch + '/' + name;
+  function assetPath(theme, component, epoch, name) {
+    return '/themes/' + theme + '/assets/' + component + '/epoch' + epoch + '/' + name;
   }
 
   function loadAssets(panel) {
+    const theme = panel.dataset.theme;
     const component = panel.dataset.component;
     const epoch = panel.dataset.epoch;
     const list = qs('.boat-rudder__dashboard__asset-list', panel);
     list.innerHTML = '<li>Loading...</li>';
 
-    fetch('/dashboard/api/theme-assets/list?component=' + encodeURIComponent(component) +
-          '&epoch=' + encodeURIComponent(epoch))
+    fetch('/dashboard/api/theme-assets/list?theme=' + encodeURIComponent(theme) +
+          '&component=' + encodeURIComponent(component) + '&epoch=' + encodeURIComponent(epoch))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         list.innerHTML = '';
@@ -33,7 +35,7 @@
           return;
         }
         files.forEach(function (name) {
-          const path = assetPath(component, epoch, name);
+          const path = assetPath(theme, component, epoch, name);
 
           const li = document.createElement('li');
 
@@ -51,7 +53,8 @@
           del.className = 'boat-rudder__dashboard__button';
           del.addEventListener('click', function () {
             if (!confirm('Delete ' + name + '?')) return;
-            fetch('/dashboard/api/theme-assets/delete?component=' + encodeURIComponent(component) +
+            fetch('/dashboard/api/theme-assets/delete?theme=' + encodeURIComponent(theme) +
+                  '&component=' + encodeURIComponent(component) +
                   '&epoch=' + encodeURIComponent(epoch) + '&file=' + encodeURIComponent(name),
                   { method: 'POST' }).then(function () { loadAssets(panel); });
           });
@@ -72,12 +75,14 @@
       const file = input.files[0];
       if (!file) return;
 
+      const theme = panel.dataset.theme;
       const component = panel.dataset.component;
       const epoch = panel.dataset.epoch;
       const fd = new FormData();
       fd.append('file', file);
 
-      fetch('/dashboard/api/theme-assets/upload?component=' + encodeURIComponent(component) +
+      fetch('/dashboard/api/theme-assets/upload?theme=' + encodeURIComponent(theme) +
+            '&component=' + encodeURIComponent(component) +
             '&epoch=' + encodeURIComponent(epoch), { method: 'POST', body: fd })
         .then(function () { input.value = ''; loadAssets(panel); });
     });

@@ -51,8 +51,8 @@ cleanup:
 }
 
 // Epoch (-1..3) -> a short human label for the admin form's <h2>. Index via
-// cms_site_settings_epoch_index().
-static const char *EPOCH_LABELS[SITE_SETTINGS_EPOCH_COUNT] = {
+// epoch_to_index().
+static const char *EPOCH_LABELS[EPOCH_COUNT] = {
     "Epoch -1 (WAP / WML)",
     "Epoch 0 (text browsers)",
     "Epoch 1 (early HTML, tables/font)",
@@ -61,12 +61,14 @@ static const char *EPOCH_LABELS[SITE_SETTINGS_EPOCH_COUNT] = {
 };
 
 // Shared by site_settings_banner_page()/site_settings_footer_page():
-// `settings_segment` is the /dashboard/settings/<segment>/<epoch> route
+// `key` is the theme being edited (not necessarily the admin's own active
+// theme - see theme-scoped-personalization-plan.md §4); `settings_segment`
+// is the /dashboard/settings/themes/<key>/<segment>/<epoch> route
 // ("banner"/"footer"); `asset_component` is the theme-assets directory name
-// under html/themes/<theme>/assets/ ("mainbanner"/"footer") - the two differ
+// under html/themes/<key>/assets/ ("mainbanner"/"footer") - the two differ
 // because the on-disk directory predates this feature and keeps its name.
-static char *asset_page(int epoch, const char *title, const char *settings_segment,
-                         const char *asset_component, char *const values[SITE_SETTINGS_EPOCH_COUNT]) {
+static char *asset_page(int epoch, const char *title, const char *key, const char *settings_segment,
+                         const char *asset_component, char *const values[EPOCH_COUNT]) {
     char *page_tpl  = load_template("dashboard/settings/settings-asset_epoch%d.html", epoch);
     char *panel_tpl = load_template("dashboard/settings/settings-asset-panel_epoch%d.html", epoch);
 
@@ -77,7 +79,7 @@ static char *asset_page(int epoch, const char *title, const char *settings_segme
 
     panels = strdup("");
     for (int e = -1; panels && e <= 3; e++) {
-        int i = cms_site_settings_epoch_index(e);
+        int i = epoch_to_index(e);
         char epoch_str[4];
         snprintf(epoch_str, sizeof(epoch_str), "%d", e);
 
@@ -88,8 +90,8 @@ static char *asset_page(int epoch, const char *title, const char *settings_segme
             break;
         }
 
-        char *panel = render_template(panel_tpl, asset_component, epoch_str, EPOCH_LABELS[i],
-                                       settings_segment, epoch_str, encoded);
+        char *panel = render_template(panel_tpl, asset_component, epoch_str, key, EPOCH_LABELS[i],
+                                       key, settings_segment, epoch_str, encoded);
         free(encoded);
         if (!panel) {
             free(panels);
@@ -102,7 +104,7 @@ static char *asset_page(int epoch, const char *title, const char *settings_segme
     }
     if (!panels) goto cleanup;
 
-    result = render_template(page_tpl, title, panels);
+    result = render_template(page_tpl, title, key, panels);
 
 cleanup:
     free(page_tpl);
@@ -111,12 +113,12 @@ cleanup:
     return result;
 }
 
-char *site_settings_banner_page(int epoch, char *const values[SITE_SETTINGS_EPOCH_COUNT]) {
-    return asset_page(epoch, "Home banner", "banner", "mainbanner", values);
+char *site_settings_banner_page(int epoch, const char *key, char *const values[EPOCH_COUNT]) {
+    return asset_page(epoch, "Home banner", key, "banner", "mainbanner", values);
 }
 
-char *site_settings_footer_page(int epoch, char *const values[SITE_SETTINGS_EPOCH_COUNT]) {
-    return asset_page(epoch, "Footer", "footer", "footer", values);
+char *site_settings_footer_page(int epoch, const char *key, char *const values[EPOCH_COUNT]) {
+    return asset_page(epoch, "Footer", key, "footer", "footer", values);
 }
 
 char *site_settings_preview_page(int epoch) {
@@ -142,12 +144,19 @@ char *site_settings_themes_page(int epoch, const ThemeEntry *themes, size_t coun
             break;
         }
 
+        const CmsThemeColors *c = &themes[i].colors;
         char *panel = render_template(panel_tpl, themes[i].key,
                                        themes[i].active ? " (active)" : "", activate,
-                                       themes[i].key, themes[i].colors.background,
-                                       themes[i].colors.text, themes[i].colors.accent,
-                                       themes[i].colors.author, themes[i].colors.date,
-                                       themes[i].colors.category, themes[i].colors.border);
+                                       themes[i].key,
+                                       c->navbar_background, c->navbar_menu_normal,
+                                       c->navbar_menu_hover, c->navbar_menu_active,
+                                       c->navbar_logo,
+                                       c->body_background,
+                                       c->home_content_background, c->home_content_text,
+                                       c->blog_list_item_background, c->blog_list_item_border,
+                                       c->blog_list_item_author, c->blog_list_item_categories,
+                                       c->blog_list_item_date,
+                                       themes[i].key, themes[i].key);
         free(activate);
         if (!panel) {
             free(panels);

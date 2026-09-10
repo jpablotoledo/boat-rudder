@@ -1,5 +1,4 @@
 #include "page_layout.h"
-#include "../db/cms_site_settings.h"
 #include "../db/cms_themes.h"
 #include "../utils/generate_url_theme.h"
 #include "../utils/read_file.h"
@@ -29,13 +28,14 @@ static char *splice_part(char *html, const char *marker, const char *part, int e
 }
 
 // Like splice_part(), but for the footer specifically: its content is
-// personalizable from /dashboard/settings/footer, so it comes from
-// cms_get_site_footer() (DB override, falling back to the on-disk
-// layout/footer_epoch<N>.html itself) instead of a direct file read.
+// personalizable per theme from /dashboard/settings/themes/<key>/footer,
+// so it comes from cms_get_theme_footer() (DB override for the active
+// theme, falling back to that same theme's on-disk
+// layout/footer_epoch<N>.html) instead of a direct file read.
 static char *splice_footer(char *html, int epoch) {
     if (!html || !strstr(html, "{{FOOTER}}")) return html;
 
-    char *body = cms_get_site_footer(epoch);
+    char *body = cms_get_theme_footer(request_theme(), epoch);
     char *result = str_replace_first(html, "{{FOOTER}}", body ? body : "");
     free(body);
     free(html);
@@ -58,11 +58,21 @@ static char *splice_theme_colors(char *html) {
 
     char *style = render_template(
         "<style>:root{"
-        "--br-color-accent:%s;--br-color-background:%s;--br-color-text:%s;"
-        "--br-color-border:%s;--br-color-category:%s;--br-color-author:%s;--br-color-date:%s;"
+        "--br-color-navbar-background:%s;--br-color-navbar-menu-normal:%s;"
+        "--br-color-navbar-menu-hover:%s;--br-color-navbar-menu-active:%s;"
+        "--br-color-navbar-logo:%s;--br-color-body-background:%s;"
+        "--br-color-home-content-background:%s;--br-color-home-content-text:%s;"
+        "--br-color-blog-list-item-background:%s;--br-color-blog-list-item-border:%s;"
+        "--br-color-blog-list-item-author:%s;--br-color-blog-list-item-categories:%s;"
+        "--br-color-blog-list-item-date:%s;"
         "}</style>",
-        colors.accent, colors.background, colors.text,
-        colors.border, colors.category, colors.author, colors.date);
+        colors.navbar_background, colors.navbar_menu_normal,
+        colors.navbar_menu_hover, colors.navbar_menu_active,
+        colors.navbar_logo, colors.body_background,
+        colors.home_content_background, colors.home_content_text,
+        colors.blog_list_item_background, colors.blog_list_item_border,
+        colors.blog_list_item_author, colors.blog_list_item_categories,
+        colors.blog_list_item_date);
 
     char *result = str_replace_first(html, "{{THEME_COLORS}}", style ? style : "");
     free(style);
@@ -78,9 +88,14 @@ static char *splice_theme_colors(char *html) {
 // separate one per epoch (see cms_themes.h). Epoch 1/2 have no CSS custom
 // properties (epoch 1: no CSS at all; epoch 2's inline <style> predates
 // CSS3 variables), so colors go straight into HTML attributes
-// (bgcolor/text/link/vlink) as substituted text, not injected CSS.
-// {{COLOR_ACCENT}} appears twice per layout (link and vlink), hence two
-// passes.
+// (bgcolor/text/link/vlink) as substituted text, not injected CSS. There
+// is no epoch 1/2 concept of "hover"/"active" menu states, so
+// {{COLOR_ACCENT}} (link/vlink - appears twice per layout, hence two
+// passes below) uses navbar-menu-normal, the closest of the 13 tokens to
+// a generic link color; {{COLOR_BACKGROUND}}/{{COLOR_TEXT}} use
+// body-background/home-content-text (body text has no dedicated token of
+// its own in the Figma palette - home-content-text is the closest match,
+// being the main visible text color on these epochs' pages).
 static char *splice_retro_colors(char *html) {
     if (!html) return NULL;
     if (!strstr(html, "{{COLOR_BACKGROUND}}") && !strstr(html, "{{COLOR_TEXT}}") &&
@@ -90,21 +105,21 @@ static char *splice_retro_colors(char *html) {
     CmsThemeColors colors;
     cms_get_theme_colors(request_theme(), &colors);
 
-    char *step = str_replace_first(html, "{{COLOR_BACKGROUND}}", colors.background);
+    char *step = str_replace_first(html, "{{COLOR_BACKGROUND}}", colors.body_background);
     free(html);
     if (!step) return NULL;
 
-    char *next = str_replace_first(step, "{{COLOR_TEXT}}", colors.text);
+    char *next = str_replace_first(step, "{{COLOR_TEXT}}", colors.home_content_text);
     free(step);
     if (!next) return NULL;
     step = next;
 
-    next = str_replace_first(step, "{{COLOR_ACCENT}}", colors.accent);
+    next = str_replace_first(step, "{{COLOR_ACCENT}}", colors.navbar_menu_normal);
     free(step);
     if (!next) return NULL;
     step = next;
 
-    next = str_replace_first(step, "{{COLOR_ACCENT}}", colors.accent);
+    next = str_replace_first(step, "{{COLOR_ACCENT}}", colors.navbar_menu_normal);
     free(step);
     return next;
 }

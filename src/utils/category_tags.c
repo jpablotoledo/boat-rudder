@@ -41,8 +41,8 @@ char *category_tags_render(char **links, char **names, size_t count, int epoch) 
     for (size_t i = 0; result && i < count; i++) {
         char *tag;
         if (needs_color)
-            tag = linked ? render_template(item_tpl, links[i], retro.category, names[i])
-                         : render_template(item_tpl, retro.category, names[i]);
+            tag = linked ? render_template(item_tpl, links[i], retro.blog_list_item_categories, names[i])
+                         : render_template(item_tpl, retro.blog_list_item_categories, names[i]);
         else
             tag = linked ? render_template(item_tpl, links[i], names[i])
                          : render_template(item_tpl, names[i]);

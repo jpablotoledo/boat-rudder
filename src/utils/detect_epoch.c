@@ -108,3 +108,8 @@ int detect_epoch(const char *user_agent) {
 
     return EPOCH_EARLY;
 }
+
+int epoch_to_index(int epoch) {
+    if (epoch < EPOCH_WML || epoch > EPOCH_MODERN) return -1;
+    return epoch + 1;
+}

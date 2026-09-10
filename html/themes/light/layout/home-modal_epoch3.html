@@ -1,0 +1,24 @@
+<div class="boat-rudder__home-blog-modal" id="homeBlogModal">
+  <span class="boat-rudder__home-blog-modal__close" id="homeBlogModalClose">&times;</span>
+  <img id="homeBlogModalImage" src="" alt="">
+</div>
+
+<script>
+(function () {
+  const modal = document.getElementById('homeBlogModal');
+  const modalImage = document.getElementById('homeBlogModalImage');
+  const closeModal = document.getElementById('homeBlogModalClose');
+
+  document.querySelectorAll('.boat-rudder__home-blog__item__image img').forEach((image) => {
+    image.addEventListener('click', () => {
+      modalImage.src = image.src;
+      modal.classList.add('active');
+    });
+  });
+
+  closeModal.addEventListener('click', () => modal.classList.remove('active'));
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.remove('active');
+  });
+})();
+</script>

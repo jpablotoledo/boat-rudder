@@ -13,13 +13,14 @@
 >
 > **Relationship to the theme system:** [theme-system-plan.md](theme-system-plan.md) splits
 > `html/themes/<theme>/` into a shared `html/templates/` tree plus a slimmer, brand-only
-> `html/themes/<theme>/` tree. `site_settings.banner_html`/`footer_html` stay exactly as
-> designed here - they are site *content* (what an admin typed/uploaded), not theme *design*, so
-> they are unaffected by that split. The only touch point: `cms_get_site_banner()`/
-> `cms_get_site_footer()`'s on-disk fallback (`mainbanner/mainbanner_epoch<N>.html`,
-> `layout/footer_epoch<N>.html`) resolves through the same theme-aware path lookup as everything
-> else, which continues to work unchanged because `mainbanner/` and `layout/` stay theme-owned in
-> that plan's split.
+> `html/themes/<theme>/` tree; at that point `site_settings.banner_html`/`footer_html` were left
+> as designed here (site *content*, not theme *design*), unaffected by the split. That stopped
+> being the right call once a second theme (`light`) actually existed - see
+> [theme-scoped-personalization-plan.md](theme-scoped-personalization-plan.md), which **moves
+> `banner_html`/`footer_html` from `site_settings` into `themes.<key>`**, alongside colors: a
+> banner is part of a theme's look, not the site's identity, the same distinction that plan draws
+> for colors. `cms_get_site_banner()`/`cms_get_site_footer()` and their `/dashboard/settings/
+> banner`/`/footer` routes described in §3-§7 below are superseded by that plan once implemented.
 
 Diagrams: reuse [diagrams/site-settings-components.puml](../diagrams/site-settings-components.puml)
 as a base; extend it once implementation starts.
@@ -76,7 +77,7 @@ Image assets referenced by the current five banner files live at:
 html/themes/dark/assets/mainbanner/
 ├── epoch-1/mobile-m.png, mobile-m.wbmp
 ├── epoch1/main.gif
-├── epoch2/background.gif, floor.gif, background-wb.gif
+├── epoch2/background.gif, sea.gif, background-wb.gif
 └── epoch3/main.jpg
 ```
 (no `epoch0/` - epoch 0's banner is empty today). Footer assets live at

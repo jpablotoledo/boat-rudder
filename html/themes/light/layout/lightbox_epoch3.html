@@ -1,0 +1,49 @@
+<!-- Gallery lightbox -->
+<div class="boat-rudder__gallery-lightbox" id="galleryLightbox">
+  <span class="boat-rudder__gallery-lightbox__close" onclick="closeGalleryLightbox()">&times;</span>
+  <button class="boat-rudder__gallery-lightbox__prev" onclick="galleryLightboxNav(-1)">&#10094;</button>
+  <img class="boat-rudder__gallery-lightbox__img" id="galleryLightboxImg" src="" alt="">
+  <button class="boat-rudder__gallery-lightbox__next" onclick="galleryLightboxNav(1)">&#10095;</button>
+</div>
+
+<script>
+(function() {
+  var lightbox = document.getElementById('galleryLightbox');
+  var lightboxImg = document.getElementById('galleryLightboxImg');
+  var galleryImages = [];
+  var currentIdx = 0;
+
+  window.openGalleryLightbox = function(img) {
+    // Any image that declares a full-size source joins the viewer: gallery
+    // items and standalone image blocks alike.
+    galleryImages = Array.from(document.querySelectorAll('img[data-full]'));
+    currentIdx = galleryImages.indexOf(img);
+    if (currentIdx < 0) currentIdx = 0;
+    lightboxImg.src = img.dataset.full || img.src;
+    lightbox.style.display = 'flex';
+  };
+
+  window.closeGalleryLightbox = function() {
+    lightbox.style.display = 'none';
+    lightboxImg.src = '';
+  };
+
+  window.galleryLightboxNav = function(dir) {
+    if (galleryImages.length === 0) return;
+    currentIdx = (currentIdx + dir + galleryImages.length) % galleryImages.length;
+    var img = galleryImages[currentIdx];
+    lightboxImg.src = img.dataset.full || img.src;
+  };
+
+  lightbox.addEventListener('click', function(e) {
+    if (e.target === lightbox) closeGalleryLightbox();
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (lightbox.style.display !== 'flex') return;
+    if (e.key === 'Escape') closeGalleryLightbox();
+    if (e.key === 'ArrowLeft') galleryLightboxNav(-1);
+    if (e.key === 'ArrowRight') galleryLightboxNav(1);
+  });
+})();
+</script>

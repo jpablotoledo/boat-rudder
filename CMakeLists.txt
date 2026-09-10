@@ -59,6 +59,7 @@ set(SOURCES
     src/utils/qr_generator/qr_generator.c
     src/utils/request_lang.c
     src/utils/request_theme.c
+    src/utils/theme_catalog.c
     src/utils/request_user.c
 
     # Retro-compatible CMS: HTML builder
@@ -70,6 +71,7 @@ set(SOURCES
     src/modules/category_menu/category_menu.c
     src/modules/entry_page/entry_page.c
     src/modules/language_page/language_page.c
+    src/modules/theme_page/theme_page.c
     src/modules/login/login.c
     src/modules/dashboard/dashboard.c
     src/modules/error/error.c

@@ -9,8 +9,10 @@
 #include "../../utils/http_utils.h"
 #include "../../utils/read_file.h"
 #include "../../utils/request_lang.h"
+#include "../../utils/request_theme.h"
 #include "../../utils/request_user.h"
 #include "../../utils/template_utils.h"
+#include "../../utils/theme_catalog.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -88,6 +90,78 @@ static char *language_selector(int epoch) {
 
     free(tpl);
     cms_languages_free(langs, count);
+    return result ? result : strdup("");
+}
+
+// A theme switcher for the nav bar, "similar a la lista de idiomas" -
+// mirrors language_selector() exactly: epoch 3 renders a drop-down whose
+// entries link straight to /theme/set (sets the `theme` cookie, bounces
+// back); epoch 1/2, where a drop-down cannot be relied on, get a plain
+// link to the /theme page instead (theme_page.c), which itself mirrors
+// /language's own epoch 1 (direct "<page>?theme=xx" link, no redirect -
+// see theme_page.c) vs. epoch 2 (/theme/set) split. Epoch -1/0 still don't
+// offer this: their look barely differs between themes today (colors
+// already come from the same DB-backed palette regardless of which
+// theme's markup is loaded - see theme-system-plan.md), so a page for a
+// control that changes almost nothing there isn't worth it yet.
+//
+// Returns a malloc'd string ("" when there is nothing to offer: fewer than
+// two themes, epoch -1/0, or the templates are missing), never NULL
+// unless allocation fails.
+static char *theme_selector(int epoch) {
+    if (epoch < EPOCH_EARLY) return strdup("");
+
+    char **keys = NULL;
+    size_t count = 0;
+    list_theme_keys(&keys, &count);
+
+    // A single theme offers no choice; showing the control would be noise.
+    if (count < 2) {
+        free_theme_keys(keys, count);
+        return strdup("");
+    }
+
+    const char *active = request_theme();
+
+    char return_enc[1024];
+    url_encode(return_enc, request_path(), sizeof(return_enc));
+
+    char *tpl_path = generate_url_theme("menu/menu-theme_epoch%d.html", epoch);
+    char *tpl = tpl_path ? read_file_to_string(tpl_path) : NULL;
+    free(tpl_path);
+    if (!tpl) {
+        free_theme_keys(keys, count);
+        return strdup("");
+    }
+
+    char *result = NULL;
+    if (epoch >= EPOCH_MODERN) {
+        char *item_path = generate_url_theme("menu/menu-theme-item_epoch%d.html", epoch);
+        char *item_tpl = item_path ? read_file_to_string(item_path) : NULL;
+        free(item_path);
+
+        if (item_tpl) {
+            char *items = strdup("");
+            for (size_t i = 0; items && i < count; i++) {
+                const char *is_active = strcmp(keys[i], active) == 0
+                    ? " boat-rudder__navbar__theme__item--active" : "";
+                char *item = render_template(item_tpl, is_active, keys[i], return_enc, keys[i]);
+                items = item ? str_append(items, item) : NULL;
+                free(item);
+            }
+            if (items) result = render_template(tpl, active, items);
+            free(items);
+            free(item_tpl);
+        }
+    } else {
+        // menu-theme_epoch{1,2}.html link to /theme?return=..., a full page
+        // listing every theme (theme_page.c) - same shape as
+        // menu-lang_epoch{1,2}.html linking to /language.
+        result = render_template(tpl, return_enc, active);
+    }
+
+    free(tpl);
+    free_theme_keys(keys, count);
     return result ? result : strdup("");
 }
 
@@ -217,12 +291,26 @@ char *menu(const char *current_url, int epoch) {
             else { free(items); items = NULL; }
             free(user_html_mobile);
 
-            result = (site_name && user_html && items)
-                ? render_template(menu_tpl, user_html, site_name, items, lang_html) : NULL;
+            char *theme_html = theme_selector(epoch);
+
+            result = (site_name && user_html && items && theme_html)
+                ? render_template(menu_tpl, user_html, site_name, items, theme_html, lang_html)
+                : NULL;
             free(site_name);
             free(user_html);
+            free(theme_html);
         } else {
-            result = render_template(menu_tpl, logo, items, lang_html);
+            // No new %s slot on menu_epoch{1,2}.html's own container for
+            // this - menu-theme_epoch{1,2}.html is a self-contained,
+            // already-spaced snippet (mirrors menu-lang_epoch{1,2}.html's
+            // own leading spacer/cell), so it is simply appended onto the
+            // same lang_html argument the container already takes,
+            // reassigning lang_html so the one free() below still covers
+            // whichever buffer ends up here.
+            char *theme_html = theme_selector(epoch);
+            lang_html = theme_html ? str_append(lang_html, theme_html) : NULL;
+            free(theme_html);
+            result = lang_html ? render_template(menu_tpl, logo, items, lang_html) : NULL;
         }
     }
     free(lang_html);

@@ -34,6 +34,22 @@
 > [site-settings-plan.md](site-settings-plan.md) (§3, §7): a color palette is a property of a
 > *theme*, not of the site's identity, so it moves from `site_settings.colors` to the new
 > `themes` collection this document defines.
+>
+> **§9: a second theme (`light`), a per-visitor theme switcher, and the fixes that took to get
+> there** - see §9 below for the full analysis. Short version: getting a real second theme
+> working surfaced a real bug (`cms_get_theme_colors()`'s fallback was a single hardcoded
+> palette shared by every theme key, so a theme with no saved document inherited `dark`'s neon
+> colors instead of its own), now fixed with a per-theme default table. The navbar gained a
+> theme switcher mirroring the language one exactly, including per-visitor choice via a `theme`
+> cookie (`request_theme()`'s precedence is now query > cookie > `site_settings.active_theme` >
+> config, identical in shape to `request_lang()`). `light` itself is a **mechanical** conversion,
+> not a bespoke redesign - see §9.3 for exactly what that means and what's still rough.
+>
+> **Follow-up**: `light` existing also exposed that the home banner and footer
+> (site-personalization-plan.md) were still site-wide, not per-theme like colors - see
+> [theme-scoped-personalization-plan.md](theme-scoped-personalization-plan.md), which moves them
+> into `themes.<key>` and reshapes `/dashboard/settings` so a theme's colors, banner and footer
+> are edited together.
 
 ## 1. Goal
 
@@ -331,3 +347,176 @@ changes, per the classification in §2:
    per-request DB reads this codebase already does, so unlikely to be one for a local stat()
    call), the fix is an isolated optimization - cache each theme's file listing at startup or on
    first miss - that doesn't change this plan's schema, resolution order, or admin UI.
+
+## 9. A second theme (`light`) and a navbar theme switcher
+
+Requested together: "analyse what a second theme actually needs" plus "a theme picker in the
+navbar, like the language one." Building a real second theme is what surfaced the analysis - the
+first attempt (just dropping a `light/` directory in) immediately showed a design gap this
+document hadn't accounted for.
+
+### 9.1 The bug: one hardcoded color fallback, not one per theme
+
+`cms_get_theme_colors()` (§5) fell back to a single compile-time `DEFAULT_COLORS` struct - dark's
+own hex values - whenever a theme had no saved `themes.<key>.colors` document. That's fine for
+`dark` (its fallback *is* its own palette), but wrong for any other theme: a fresh `light` theme
+with no customization yet would have inherited dark's neon cyan/yellow/orange/green instead of
+anything resembling "light." The single-struct design implicitly assumed there would only ever
+be one theme, which defeated the point of adding a second one.
+
+**Fix**: `DEFAULT_COLORS` became `THEME_DEFAULTS[]`, a small array of `{key, CmsThemeColors}`
+pairs (`src/db/cms_themes.c`) - `dark` and `light` each get their own entry; a theme with no
+entry falls back to `dark`'s (the same "never break, never look broken" guarantee as everywhere
+else in this codebase, just now keyed instead of singular). Epoch 3 doesn't strictly need this
+table at all - its own `styles_epoch3.css` can carry `var(--x, <its-own-fallback>)` independent
+of any C constant - but epoch 1/2 substitute plain hex directly into HTML attributes with no
+`var()`-style local fallback mechanism available, so *something* server-side has to supply a
+default per theme. This table is that something.
+
+### 9.2 The switcher: a per-visitor cookie, mirroring language exactly
+
+"Similar a la lista de idiomas" was taken literally: `request_theme()`'s precedence is now
+`?theme=` query > `theme` cookie > `site_settings.active_theme` > `configs/settings.conf`,
+structurally identical to `request_lang()`'s `?lang=` > `lang` cookie > `cms_resolve_default_lang()`.
+This is a deliberate reframing from §4's original design, where "active theme" was purely a
+site-wide admin setting - it still is *the default*, but a visitor can now override it for
+themselves, the same way they already can with language. `/theme/set?key=<key>&return=<path>`
+mirrors `/language/set` down to the plain-GET-so-it-works-with-no-JS rationale and reuses
+`language_page.c`'s `language_sanitize_return()` (an open-redirect guard with nothing
+language-specific in it despite the name).
+
+The navbar control itself (`menu.c`'s `theme_selector()`, `menu-theme_epoch3.html`/
+`menu-theme-item_epoch3.html`) is a line-for-line mirror of `language_selector()`: a drop-down,
+hidden when fewer than two themes exist, listing whatever `list_theme_keys()` finds under
+`html/themes/` (extracted from `http_router.c`'s admin-page code into
+`src/utils/theme_catalog.c`, now shared by both).
+
+**Update (follow-up request): epoch 1/2 got the same fallback language already has.** Originally
+scoped to epoch 3 only - "a second full page for a control that mostly changes epoch 3's
+typography/imagery wasn't judged worth it yet." A direct follow-up asked for it anyway, so
+`menu-theme_epoch{1,2}.html` (a plain link, same shape as `menu-lang_epoch{1,2}.html`) now points
+to a new `/theme` page (`src/modules/theme_page/theme_page.c`, `html/templates/theme/`) - a
+line-for-line mirror of `/language` (`language_page.c`), including its epoch split: epoch 1 links
+directly to `<return>?theme=xx` (no redirect - `request_theme_set()`'s query-string precedence,
+already top of the chain per §9.2 above, picks it up with no extra plumbing needed), epoch 2
+links to `/theme/set` (cookie-setting redirect). Epoch -1/0 remain out of scope - not requested,
+and `/theme` itself gracefully 500s there (no template) rather than crashing, same as any other
+missing-template path in this codebase; nothing links to it from those epochs so the gap is
+inert.
+
+`theme_key_is_valid()` (new, `theme_catalog.c`) gates every theme key from here on - the cookie,
+the query string, and `cms_set_active_theme()`'s admin form - restricting it to
+`[a-zA-Z0-9_-]` before ever calling `stat()`. Worth calling out: this closes a real (if narrow)
+path-traversal gap that predates this section - `key=../content` would previously have resolved
+to a real, unrelated directory under `html/` and passed the existence check, and unlike the
+admin-only activation endpoint, `/theme/set` is public.
+
+### 9.3 `light`: a mechanical conversion, not a redesign
+
+`html/themes/light/` exists and works, built by copying `dark/` wholesale and then:
+
+- **Every `/themes/dark/` reference rewritten to `/themes/light/`** (asset paths, the
+  stylesheet `<link>`) across all copied files, so the theme is self-contained - it does not
+  reach into `dark/`'s files or assets at runtime.
+- **`styles_epoch3.css` had its dominant structural colors inverted** by a scripted find/replace
+  over a handful of values that appear dozens of times each (`#000000` and its translucent
+  `#0000006b`-style variants -> white; `#ffffff`/`#fff` -> dark text; the near-black card/panel
+  greys `#1a1a1a`/`#1e1e1e`/`#0d0d0d`/`#111`/`#2a2a2a`/`#3a3a3a` -> light equivalents). Smaller,
+  rarer accent colors (the neon cyan/purple/blue/pink/orange scattered through specific
+  components) were **not** touched - some of them read fine as accents on a light background as
+  a happy accident, some (light text on a mid-brightness colored button, e.g.) now have
+  mediocre-but-not-broken contrast. This is the honest state of it: a real, working, distinctly
+  light theme, not a hand-tuned one.
+- **Decorative epoch 1/2/3 imagery (banner photo, footer/home-content GIF textures) is `dark`'s
+  actual image files, copied byte-for-byte** into `light/assets/`. They still look like dark-mode
+  assets (a neon banner photo, grungy dark textures) sitting on a light page - functional, not
+  aesthetically tailored. Swapping them for light-appropriate imagery is future design work, not
+  an architecture change - just new files at the same paths.
+- **Colors are real, not copied**: `light`'s own `THEME_DEFAULTS` entry (§9.1) is a genuine light
+  palette (off-white background, near-black text, a blue accent instead of cyan), so
+  `/dashboard/settings/themes` and every epoch's rendering reflect an actual light theme, not
+  dark's colors on a white background.
+
+Verified end-to-end: switching to `light` via the navbar (and via a raw `theme` cookie) changes
+the stylesheet link, the injected `--br-color-*` CSS variables, and epoch 1/2's substituted
+`bgcolor`/`text`/`link`/`vlink` attributes, simultaneously and correctly, across all five epochs
+and both the admin panel and public pages.
+
+### 9.4 Recommendation for a future pass: fold epoch -1/0/1/2 into `templates/` too
+
+`light/` needing a full copy of `dark/`'s ~140 files (not just its ~10 epoch-3 ones) to exist at
+all is the direct cost of §2's original classification: `menu/`, `mainbanner/`, `layout/`,
+`category-menu/`, `home-content/`, `home-blog/` and `page/page-home` were all classified
+**theme**-owned for every epoch, including -1/0/1/2, where - as §9.1/§9.2 just demonstrated in
+practice - there is now almost nothing left to actually differentiate: colors are unified and
+DB-driven regardless of which theme's markup is loaded, and the decorative imagery is
+realistically shared/copied rather than bespoke per theme anyway.
+
+**Not executed in this pass** (a ~67-file `git mv`, plus verifying every epoch/route still
+renders identically afterward - its own dedicated pass, the same shape as the original
+`templates/`/`themes/` split in §7): move epoch -1/0/1/2 variants of those six directories into
+`html/templates/`, leaving only their epoch 3 files (plus `styles_epoch3.css` and epoch-3 assets)
+theme-owned. A new theme would then need to ship perhaps 10-15 files instead of ~140, with older
+epochs automatically inheriting the shared retro shell - colors already come from the theme
+regardless via §9.1's table. The one real judgment call this raises: shared epoch<3 files would
+hardcode `dark`'s asset paths as everyone's shared imagery (`/themes/dark/assets/...`), which is
+already effectively what happened when `light/` copied those exact files - formalizing it as the
+deliberate shared default, rather than a per-theme duplicate, is the actual proposal here.
+
+## 10. Figma-sourced 13-variable color model (replaces §5's 7-field `CmsThemeColors`)
+
+> **Status**: implemented. `CmsThemeColors` now carries exactly the 13 variables defined in the
+> project's Figma file ("Color palette Dark"/"Color palette Light" collections), replacing the
+> old ad-hoc 7-token set (`background`/`text`/`accent`/`author`/`date`/`category`/`border`). One
+> merged, non-epoch-split color form still applies (per §9's "no separar por época" requirement) -
+> only the token count and names changed, not the "one set of colors for every epoch with a color
+> model" architecture.
+
+The 13 fields, their purpose, and their Figma-matching hex defaults:
+
+| Field (`CmsThemeColors`)      | BSON key (hyphenated)        | dark      | light     |
+|--------------------------------|-------------------------------|-----------|-----------|
+| `navbar_background`            | `navbar-background`           | `#241144` | `#8dd3ff` |
+| `navbar_menu_normal`           | `navbar-menu-normal`          | `#ffffff` | `#680072` |
+| `navbar_menu_hover`             | `navbar-menu-hover`           | `#98ffdd` | `#006d49` |
+| `navbar_menu_active`           | `navbar-menu-active`          | `#00ffab` | `#3800aa` |
+| `navbar_logo`                  | `navbar-logo`                 | `#ffffff` | `#680072` |
+| `body_background`              | `body-background`             | `#241144` | `#8dd3ff` |
+| `home_content_background`      | `home-content-background`     | `#170c29` | `#cbebff` |
+| `home_content_text`            | `home-content-text`           | `#ffffff` | `#000000` |
+| `blog_list_item_background`    | `blog-list-item-background`   | `#000000` | `#ffffff` |
+| `blog_list_item_border`        | `blog-list-item-border`       | `#00ffab` | `#0009ac` |
+| `blog_list_item_author`        | `blog-list-item-author`       | `#dfd106` | `#cb5600` |
+| `blog_list_item_categories`    | `blog-list-item-categories`   | `#98ffdd` | `#0076c0` |
+| `blog_list_item_date`          | `blog-list-item-date`         | `#e68e4e` | `#00636a` |
+
+BSON field names are hyphenated to match the Figma variable names exactly (Mongo/BSON permits
+hyphens in field names), rather than being translated to `snake_case`.
+
+**Rendering**: unchanged mechanism from §5's "Rendering" subsection, just re-sourced to 13
+tokens instead of 7. Epoch 3 gets all 13 as `--br-color-<name>` CSS custom properties injected
+via a `<style>:root{...}</style>` block; every `styles_epoch3.css` rule that previously
+referenced a color inline (or an old 7-token `var()`) now reads its matching `--br-color-*`
+variable with the theme's own default baked in as the CSS `var()` fallback - so a theme with no DB
+override, or a DB document missing a given key, still renders identically to before this change.
+Epoch 1/2 (no CSS custom properties there) keep the existing narrower substitution: only
+`body_background`/`home_content_text`/`navbar_menu_normal` reach epoch 1/2 markup, via
+`{{COLOR_BACKGROUND}}`/`{{COLOR_TEXT}}`/`{{COLOR_ACCENT}}`, unchanged from §9's split - the other
+10 variables have no epoch 1/2 equivalent (no matching visual element, or no attribute to carry a
+color on those epochs' markup).
+
+**Admin form** (`/dashboard/settings/themes`, `settings-themes-panel_epoch3.html`): 13
+`<input type="color">` fields grouped into four `<fieldset>`s (Navbar, Body, Home content, Blog
+list item), POSTing to the same `/dashboard/settings/themes/<key>/colors` route, one merged form
+per theme as before - no per-epoch split.
+
+**Migration**: the old 7-key `colors` subdocuments in the `themes` collection (`background`,
+`text`, `accent`, `author`, `date`, `category`, `border`) were `$unset` from both the `dark` and
+`light` documents in production Mongo, rather than translated - `copy_field()` only recognizes
+the 13 new hyphenated keys, so leaving the old subdocument in place would have meant an empty-
+looking `colors: {}` object was still present while every field silently fell through to
+`THEME_DEFAULTS` anyway; unsetting it restores the documented "no `themes` doc / no `colors`
+subdocument → hardcoded defaults" fallback guarantee cleanly. Verified end-to-end on a local
+`:8080` instance: default rendering for both themes (epoch 1/2/3), the admin form listing and
+saving all 13 fields per theme via a real authenticated POST, and the saved values propagating
+live into both the epoch 3 `:root` style block and (where applicable) epoch 1/2 attributes.

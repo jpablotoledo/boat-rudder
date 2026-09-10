@@ -28,6 +28,7 @@
 #include "../modules/error/error.h"
 #include "../modules/languages_admin/languages_admin.h"
 #include "../modules/language_page/language_page.h"
+#include "../modules/theme_page/theme_page.h"
 #include "../modules/login/login.h"
 #include "../modules/media_admin/media_admin.h"
 #include "../modules/menu_admin/menu_admin.h"
@@ -41,6 +42,7 @@
 #include "../utils/read_file.h"
 #include "../utils/request_lang.h"
 #include "../utils/request_theme.h"
+#include "../utils/theme_catalog.h"
 #include "../utils/request_user.h"
 #include "../utils/config_loader.h"
 #include "../utils/qr_generator/qr_generator.h"
@@ -323,12 +325,17 @@ static int match_id_route(const char *decoded_url, const char *prefix,
 // theme's own mainbanner/footer markup already references - not the content
 // media library (html/content/posts/..., per-author, gallery-oriented).
 //
+// `key` is the theme being edited - taken explicitly from the request
+// (query string), never from request_theme() (the admin's own active
+// theme for this request, which need not be the theme whose banner/footer
+// editor is open - see theme-scoped-personalization-plan.md §4).
 // `component` is restricted to the two directories this feature actually
 // uses; `epoch_str` must be one of "-1".."3". Fills dir_out (>= 256 bytes)
-// with "./html/themes/<theme>/assets/<component>/epoch<epoch_str>" and
-// returns 1, or returns 0 (dir_out untouched) if either is invalid.
-static int theme_assets_dir(const char *component, const char *epoch_str,
+// with "./html/themes/<key>/assets/<component>/epoch<epoch_str>" and
+// returns 1, or returns 0 (dir_out untouched) if any argument is invalid.
+static int theme_assets_dir(const char *key, const char *component, const char *epoch_str,
                              char *dir_out, size_t dir_size) {
+    if (!theme_key_is_valid(key)) return 0;
     if (!component || !epoch_str) return 0;
     if (strcmp(component, "mainbanner") != 0 && strcmp(component, "footer") != 0) return 0;
 
@@ -340,7 +347,7 @@ static int theme_assets_dir(const char *component, const char *epoch_str,
     if (!epoch_ok) return 0;
 
     int n = snprintf(dir_out, dir_size, "./html/themes/%s/assets/%s/epoch%s",
-                      request_theme(), component, epoch_str);
+                      key, component, epoch_str);
     return n > 0 && (size_t)n < dir_size;
 }
 
@@ -385,9 +392,9 @@ static int sanitize_asset_filename(const char *in, char *out, size_t out_size) {
 // component/epoch or an unreadable directory yields an empty list, not an
 // error - this endpoint only helps the admin find a path to paste, nothing
 // depends on it being exhaustive).
-static char *theme_assets_list_json(const char *component, const char *epoch_str) {
+static char *theme_assets_list_json(const char *key, const char *component, const char *epoch_str) {
     char dir[256];
-    if (!theme_assets_dir(component, epoch_str, dir, sizeof(dir)))
+    if (!theme_assets_dir(key, component, epoch_str, dir, sizeof(dir)))
         return strdup("{\"files\":[]}");
 
     DIR *d = opendir(dir);
@@ -412,46 +419,6 @@ static char *theme_assets_list_json(const char *component, const char *epoch_str
     if (!json) return strdup("{\"files\":[]}");
     json = str_append(json, "]}");
     return json ? json : strdup("{\"files\":[]}");
-}
-
-// Discovers available themes for /dashboard/settings/themes by reading
-// html/themes/ directly - no DB catalog/registration step, per
-// theme-system-plan.md §5 ("drop a directory in, it shows up"). *out is a
-// malloc'd array of *out_count malloc'd key strings (caller frees each and
-// the array); an unreadable directory yields *out = NULL, *out_count = 0.
-static void list_theme_keys(char ***out, size_t *out_count) {
-    *out = NULL;
-    *out_count = 0;
-
-    DIR *d = opendir("./html/themes");
-    if (!d) return;
-
-    size_t cap = 8;
-    char **keys = malloc(cap * sizeof(char *));
-    if (!keys) { closedir(d); return; }
-
-    size_t count = 0;
-    struct dirent *entry;
-    while ((entry = readdir(d)) != NULL) {
-        if (entry->d_name[0] == '.') continue;
-
-        char path[300];
-        snprintf(path, sizeof(path), "./html/themes/%s", entry->d_name);
-        struct stat st;
-        if (stat(path, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
-
-        if (count >= cap) {
-            cap *= 2;
-            char **grown = realloc(keys, cap * sizeof(char *));
-            if (!grown) break;
-            keys = grown;
-        }
-        keys[count++] = strdup(entry->d_name);
-    }
-    closedir(d);
-
-    *out = keys;
-    *out_count = count;
 }
 
 // Matches "/dashboard/api/entries/<entry_id>/blocks/<block_id>/delete". On
@@ -486,6 +453,40 @@ static int match_block_delete_route(const char *decoded_url, char *entry_id_out,
     entry_id_out[entry_len] = '\0';
     memcpy(block_id_out, block_start, block_len);
     block_id_out[block_len] = '\0';
+    return 1;
+}
+
+// Matches "/dashboard/settings/themes/<key>/<segment>/<epoch>" (`segment`
+// is "banner" or "footer"; `epoch` is the trailing segment, possibly
+// negative - "-1"). On match, copies key_out and epoch_out (each truncated
+// to its buffer size) and returns 1; 0 on no match.
+static int match_theme_epoch_route(const char *decoded_url, const char *segment,
+                                    char *key_out, size_t key_size,
+                                    char *epoch_out, size_t epoch_size) {
+    static const char prefix[] = "/dashboard/settings/themes/";
+    size_t prefix_len = sizeof(prefix) - 1;
+    if (strncmp(decoded_url, prefix, prefix_len) != 0) return 0;
+
+    const char *key_start = decoded_url + prefix_len;
+    const char *slash1 = strchr(key_start, '/');
+    if (!slash1) return 0;
+
+    size_t key_len = (size_t)(slash1 - key_start);
+    if (key_len == 0 || key_len >= key_size) return 0;
+
+    size_t segment_len = strlen(segment);
+    const char *segment_start = slash1 + 1;
+    if (strncmp(segment_start, segment, segment_len) != 0 || segment_start[segment_len] != '/')
+        return 0;
+
+    const char *epoch_start = segment_start + segment_len + 1;
+    size_t epoch_len = strlen(epoch_start);
+    if (epoch_len == 0 || epoch_len >= epoch_size || strchr(epoch_start, '/')) return 0;
+
+    memcpy(key_out, key_start, key_len);
+    key_out[key_len] = '\0';
+    memcpy(epoch_out, epoch_start, epoch_len);
+    epoch_out[epoch_len] = '\0';
     return 1;
 }
 
@@ -860,13 +861,15 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                           get_query_param(params, param_count, "lang"));
         request_path_set(decoded_url);
         request_user_set(get_header_value(&req, "Cookie"));
-        request_theme_set();
+        request_theme_set(get_header_value(&req, "Cookie"),
+                           get_query_param(params, param_count, "theme"));
         char content_lang[16];
         strncpy(content_lang, request_lang(), sizeof(content_lang) - 1);
         content_lang[sizeof(content_lang) - 1] = '\0';
 
         char id[32];
         char block_id[32];
+        char theme_epoch_str[8];
 
         if (strcmp(req.method, "GET") == 0 || strcmp(req.method, "HEAD") == 0) {
             if (strcmp(decoded_url, "/") == 0) {
@@ -1110,7 +1113,7 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                     }
                 }
 
-            } else if (strcmp(decoded_url, "/dashboard/settings/banner") == 0) {
+            } else if (match_id_route(decoded_url, "/dashboard/settings/themes", "/banner", id, sizeof(id))) {
                 int epoch = resolve_epoch(&req);
 
                 if (epoch != EPOCH_MODERN) {
@@ -1119,18 +1122,22 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                 } else {
                     char user_id[USER_ID_HEX_BUF_SIZE];
                     if (require_admin_session(ctx, &req, epoch, user_id)) {
-                        CmsSiteSettings settings;
-                        cms_get_site_settings(&settings);
-                        char *content  = site_settings_banner_page(epoch, settings.banner_html);
-                        char *body     = buildPageWebSite(epoch, "Boat Rudder - Dashboard", content);
-                        char *response = body ? build_epoch_response(body, "", epoch) : NULL;
-                        free(body);
-                        send_or_error(ctx, response, req.method, epoch);
-                        cms_site_settings_free(&settings);
+                        if (!theme_key_is_valid(id)) {
+                            send_error_response(ctx, 404, "404 Not Found", epoch);
+                        } else {
+                            char *values[EPOCH_COUNT];
+                            cms_get_theme_banner_values(id, values);
+                            char *content  = site_settings_banner_page(epoch, id, values);
+                            char *body     = buildPageWebSite(epoch, "Boat Rudder - Dashboard", content);
+                            char *response = body ? build_epoch_response(body, "", epoch) : NULL;
+                            free(body);
+                            send_or_error(ctx, response, req.method, epoch);
+                            for (int i = 0; i < EPOCH_COUNT; i++) free(values[i]);
+                        }
                     }
                 }
 
-            } else if (strcmp(decoded_url, "/dashboard/settings/footer") == 0) {
+            } else if (match_id_route(decoded_url, "/dashboard/settings/themes", "/footer", id, sizeof(id))) {
                 int epoch = resolve_epoch(&req);
 
                 if (epoch != EPOCH_MODERN) {
@@ -1139,14 +1146,18 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                 } else {
                     char user_id[USER_ID_HEX_BUF_SIZE];
                     if (require_admin_session(ctx, &req, epoch, user_id)) {
-                        CmsSiteSettings settings;
-                        cms_get_site_settings(&settings);
-                        char *content  = site_settings_footer_page(epoch, settings.footer_html);
-                        char *body     = buildPageWebSite(epoch, "Boat Rudder - Dashboard", content);
-                        char *response = body ? build_epoch_response(body, "", epoch) : NULL;
-                        free(body);
-                        send_or_error(ctx, response, req.method, epoch);
-                        cms_site_settings_free(&settings);
+                        if (!theme_key_is_valid(id)) {
+                            send_error_response(ctx, 404, "404 Not Found", epoch);
+                        } else {
+                            char *values[EPOCH_COUNT];
+                            cms_get_theme_footer_values(id, values);
+                            char *content  = site_settings_footer_page(epoch, id, values);
+                            char *body     = buildPageWebSite(epoch, "Boat Rudder - Dashboard", content);
+                            char *response = body ? build_epoch_response(body, "", epoch) : NULL;
+                            free(body);
+                            send_or_error(ctx, response, req.method, epoch);
+                            for (int i = 0; i < EPOCH_COUNT; i++) free(values[i]);
+                        }
                     }
                 }
 
@@ -1197,8 +1208,7 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
 
                         free(entries);
                         free(active);
-                        for (size_t i = 0; i < key_count; i++) free(keys[i]);
-                        free(keys);
+                        free_theme_keys(keys, key_count);
                     }
                 }
 
@@ -1209,9 +1219,10 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                 } else {
                     char user_id[USER_ID_HEX_BUF_SIZE];
                     if (require_admin_session(ctx, &req, epoch, user_id)) {
+                        const char *theme_key = get_query_param(params, param_count, "theme");
                         const char *component = get_query_param(params, param_count, "component");
                         const char *epoch_str = get_query_param(params, param_count, "epoch");
-                        char *json = theme_assets_list_json(component, epoch_str);
+                        char *json = theme_assets_list_json(theme_key, component, epoch_str);
                         char *response = build_json_response(json ? json : "{\"files\":[]}");
                         free(json);
                         connection_write(ctx, response, strlen(response));
@@ -1451,12 +1462,53 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                 free(abs_return);
                 send_or_error(ctx, response, req.method, epoch);
 
+            } else if (strcmp(decoded_url, "/theme/set") == 0) {
+                // Mirrors /language/set exactly, including the plain-GET
+                // rationale: a nav-bar link with no JS/form needed. Epoch 3
+                // only offers this from the navbar (see menu.c's
+                // theme_selector()), but the route itself doesn't check
+                // epoch - a hand-typed link works from any browser.
+                int epoch = resolve_epoch(&req);
+
+                char return_raw[512];
+                url_decode(return_raw, get_query_param(params, param_count, "return"));
+
+                char safe_return[512];
+                language_sanitize_return(return_raw, safe_return, sizeof(safe_return));
+
+                char extra[192] = "";
+                const char *key = get_query_param(params, param_count, "key");
+                if (theme_key_is_valid(key)) {
+                    snprintf(extra, sizeof(extra),
+                             "Set-Cookie: theme=%s; Path=/; Max-Age=31536000; SameSite=Lax\r\n",
+                             key);
+                }
+
+                char *abs_return = absolute_location(ctx, &req, safe_return);
+                char *response = build_redirect_response(abs_return ? abs_return : safe_return,
+                                                          extra, epoch);
+                free(abs_return);
+                send_or_error(ctx, response, req.method, epoch);
+
             } else if (strcmp(decoded_url, "/language") == 0) {
                 int epoch = resolve_epoch(&req);
                 char return_raw[512];
                 url_decode(return_raw, get_query_param(params, param_count, "return"));
                 char *content = language_page(epoch, return_raw);
                 char *body    = content ? buildPageWebSite(epoch, "Language", content) : NULL;
+                char *response = body ? build_epoch_response(body, "", epoch) : NULL;
+                free(body);
+                send_or_error(ctx, response, req.method, epoch);
+
+            } else if (strcmp(decoded_url, "/theme") == 0) {
+                // Mirrors /language exactly - the epoch 1/2 nav bar link's
+                // full-page fallback (menu.c's theme_selector()), listing
+                // every theme (theme_page.c).
+                int epoch = resolve_epoch(&req);
+                char return_raw[512];
+                url_decode(return_raw, get_query_param(params, param_count, "return"));
+                char *content = theme_page(epoch, return_raw);
+                char *body    = content ? buildPageWebSite(epoch, "Theme", content) : NULL;
                 char *response = body ? build_epoch_response(body, "", epoch) : NULL;
                 free(body);
                 send_or_error(ctx, response, req.method, epoch);
@@ -2374,30 +2426,47 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
             } else {
                 char user_id[USER_ID_HEX_BUF_SIZE];
                 if (require_admin_session(ctx, &req, epoch, user_id)) {
-                    CmsThemeColors colors = {0};
-                    parse_urlencoded_field(req.body, req.body_length, "background",
-                                            colors.background, sizeof(colors.background));
-                    parse_urlencoded_field(req.body, req.body_length, "text",
-                                            colors.text, sizeof(colors.text));
-                    parse_urlencoded_field(req.body, req.body_length, "accent",
-                                            colors.accent, sizeof(colors.accent));
-                    parse_urlencoded_field(req.body, req.body_length, "author",
-                                            colors.author, sizeof(colors.author));
-                    parse_urlencoded_field(req.body, req.body_length, "date",
-                                            colors.date, sizeof(colors.date));
-                    parse_urlencoded_field(req.body, req.body_length, "category",
-                                            colors.category, sizeof(colors.category));
-                    parse_urlencoded_field(req.body, req.body_length, "border",
-                                            colors.border, sizeof(colors.border));
+                    if (!theme_key_is_valid(id)) {
+                        send_error_response(ctx, 404, "404 Not Found", epoch);
+                    } else {
+                        CmsThemeColors colors = {0};
+                        parse_urlencoded_field(req.body, req.body_length, "navbar-background",
+                                                colors.navbar_background, sizeof(colors.navbar_background));
+                        parse_urlencoded_field(req.body, req.body_length, "navbar-menu-normal",
+                                                colors.navbar_menu_normal, sizeof(colors.navbar_menu_normal));
+                        parse_urlencoded_field(req.body, req.body_length, "navbar-menu-hover",
+                                                colors.navbar_menu_hover, sizeof(colors.navbar_menu_hover));
+                        parse_urlencoded_field(req.body, req.body_length, "navbar-menu-active",
+                                                colors.navbar_menu_active, sizeof(colors.navbar_menu_active));
+                        parse_urlencoded_field(req.body, req.body_length, "navbar-logo",
+                                                colors.navbar_logo, sizeof(colors.navbar_logo));
+                        parse_urlencoded_field(req.body, req.body_length, "body-background",
+                                                colors.body_background, sizeof(colors.body_background));
+                        parse_urlencoded_field(req.body, req.body_length, "home-content-background",
+                                                colors.home_content_background, sizeof(colors.home_content_background));
+                        parse_urlencoded_field(req.body, req.body_length, "home-content-text",
+                                                colors.home_content_text, sizeof(colors.home_content_text));
+                        parse_urlencoded_field(req.body, req.body_length, "blog-list-item-background",
+                                                colors.blog_list_item_background, sizeof(colors.blog_list_item_background));
+                        parse_urlencoded_field(req.body, req.body_length, "blog-list-item-border",
+                                                colors.blog_list_item_border, sizeof(colors.blog_list_item_border));
+                        parse_urlencoded_field(req.body, req.body_length, "blog-list-item-author",
+                                                colors.blog_list_item_author, sizeof(colors.blog_list_item_author));
+                        parse_urlencoded_field(req.body, req.body_length, "blog-list-item-categories",
+                                                colors.blog_list_item_categories, sizeof(colors.blog_list_item_categories));
+                        parse_urlencoded_field(req.body, req.body_length, "blog-list-item-date",
+                                                colors.blog_list_item_date, sizeof(colors.blog_list_item_date));
 
-                    cms_update_theme_colors(id, &colors);
-                    char *response = build_redirect_response("/dashboard/settings/themes", "", epoch);
-                    send_or_error(ctx, response, req.method, epoch);
+                        cms_update_theme_colors(id, &colors);
+                        char *response = build_redirect_response("/dashboard/settings/themes", "", epoch);
+                        send_or_error(ctx, response, req.method, epoch);
+                    }
                 }
             }
 
         } else if (strcmp(req.method, "POST") == 0 &&
-                   match_id_route(decoded_url, "/dashboard/settings/banner", "", id, sizeof(id))) {
+                   match_theme_epoch_route(decoded_url, "banner", id, sizeof(id),
+                                            theme_epoch_str, sizeof(theme_epoch_str))) {
             int epoch = resolve_epoch(&req);
 
             if (epoch != EPOCH_MODERN) {
@@ -2406,17 +2475,24 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
             } else {
                 char user_id[USER_ID_HEX_BUF_SIZE];
                 if (require_admin_session(ctx, &req, epoch, user_id)) {
-                    char html[8192];
-                    parse_urlencoded_field(req.body, req.body_length, "html", html, sizeof(html));
+                    if (!theme_key_is_valid(id)) {
+                        send_error_response(ctx, 404, "404 Not Found", epoch);
+                    } else {
+                        char html[8192];
+                        parse_urlencoded_field(req.body, req.body_length, "html", html, sizeof(html));
 
-                    cms_update_site_banner(atoi(id), html);
-                    char *response = build_redirect_response("/dashboard/settings/banner", "", epoch);
-                    send_or_error(ctx, response, req.method, epoch);
+                        cms_update_theme_banner(id, atoi(theme_epoch_str), html);
+                        char redirect_to[128];
+                        snprintf(redirect_to, sizeof(redirect_to), "/dashboard/settings/themes/%s/banner", id);
+                        char *response = build_redirect_response(redirect_to, "", epoch);
+                        send_or_error(ctx, response, req.method, epoch);
+                    }
                 }
             }
 
         } else if (strcmp(req.method, "POST") == 0 &&
-                   match_id_route(decoded_url, "/dashboard/settings/footer", "", id, sizeof(id))) {
+                   match_theme_epoch_route(decoded_url, "footer", id, sizeof(id),
+                                            theme_epoch_str, sizeof(theme_epoch_str))) {
             int epoch = resolve_epoch(&req);
 
             if (epoch != EPOCH_MODERN) {
@@ -2425,12 +2501,18 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
             } else {
                 char user_id[USER_ID_HEX_BUF_SIZE];
                 if (require_admin_session(ctx, &req, epoch, user_id)) {
-                    char html[8192];
-                    parse_urlencoded_field(req.body, req.body_length, "html", html, sizeof(html));
+                    if (!theme_key_is_valid(id)) {
+                        send_error_response(ctx, 404, "404 Not Found", epoch);
+                    } else {
+                        char html[8192];
+                        parse_urlencoded_field(req.body, req.body_length, "html", html, sizeof(html));
 
-                    cms_update_site_footer(atoi(id), html);
-                    char *response = build_redirect_response("/dashboard/settings/footer", "", epoch);
-                    send_or_error(ctx, response, req.method, epoch);
+                        cms_update_theme_footer(id, atoi(theme_epoch_str), html);
+                        char redirect_to[128];
+                        snprintf(redirect_to, sizeof(redirect_to), "/dashboard/settings/themes/%s/footer", id);
+                        char *response = build_redirect_response(redirect_to, "", epoch);
+                        send_or_error(ctx, response, req.method, epoch);
+                    }
                 }
             }
 
@@ -2853,12 +2935,13 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
             } else {
                 char user_id[USER_ID_HEX_BUF_SIZE];
                 if (require_admin_session(ctx, &req, epoch, user_id)) {
+                    const char *theme_key = get_query_param(params, param_count, "theme");
                     const char *component = get_query_param(params, param_count, "component");
                     const char *epoch_str = get_query_param(params, param_count, "epoch");
 
                     char dir[256];
-                    if (!theme_assets_dir(component, epoch_str, dir, sizeof(dir))) {
-                        send_simple(ctx, "400 Bad Request", "Invalid component or epoch");
+                    if (!theme_assets_dir(theme_key, component, epoch_str, dir, sizeof(dir))) {
+                        send_simple(ctx, "400 Bad Request", "Invalid theme, component or epoch");
                     } else {
                         const char *ct = get_header_value(&req, "Content-Type");
                         MultipartResult *mp = parse_multipart(req.body, req.body_length, ct);
@@ -2909,16 +2992,17 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
             } else {
                 char user_id[USER_ID_HEX_BUF_SIZE];
                 if (require_admin_session(ctx, &req, epoch, user_id)) {
+                    const char *theme_key = get_query_param(params, param_count, "theme");
                     const char *component = get_query_param(params, param_count, "component");
                     const char *epoch_str = get_query_param(params, param_count, "epoch");
                     const char *file = get_query_param(params, param_count, "file");
 
                     char dir[256];
                     char sanitized[256];
-                    if (!theme_assets_dir(component, epoch_str, dir, sizeof(dir)) ||
+                    if (!theme_assets_dir(theme_key, component, epoch_str, dir, sizeof(dir)) ||
                         !sanitize_asset_filename(file, sanitized, sizeof(sanitized)) ||
                         strcmp(file, sanitized) != 0) {
-                        send_simple(ctx, "400 Bad Request", "Invalid component, epoch or file");
+                        send_simple(ctx, "400 Bad Request", "Invalid theme, component, epoch or file");
                     } else {
                         char filepath[512];
                         snprintf(filepath, sizeof(filepath), "%s/%s", dir, sanitized);
