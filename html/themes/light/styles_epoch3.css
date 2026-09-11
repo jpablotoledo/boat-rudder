@@ -1693,6 +1693,59 @@ a.boat-rudder__social-network img { border-radius: 4px; flex-shrink: 0; }
 .boat-rudder__theme__item:hover { background: #e2e2e4; color: #1a1a1a; }
 .boat-rudder__theme__item--active { color: var(--br-color-navbar-menu-active, #3800aa); font-weight: bold; }
 
+/* ANALYTICS (/dashboard/analytics) */
+.boat-rudder__dashboard__empty { color: #888; font-size: 12px; }
+
+.boat-rudder__analytics__period-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: #f4f4f6; border: 1px solid #e2e2e4; padding: 12px 16px;
+}
+.boat-rudder__analytics__period-label {
+  font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase;
+  letter-spacing: .8px; margin-right: 4px;
+}
+.boat-rudder__analytics__period-btn {
+  display: inline-block; padding: 5px 14px; font-size: 12px; font-weight: 600;
+  background: #ffffff; border: 1px solid #e2e2e4; color: #555; text-decoration: none;
+  border-radius: 2px; transition: all .15s;
+}
+.boat-rudder__analytics__period-btn:hover { background: #e2e2e4; color: #3800aa; border-color: #3800aa; }
+.boat-rudder__analytics__period-btn--active { background: #3800aa; border-color: #3800aa; color: #fff; }
+.boat-rudder__analytics__range-form { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; padding: 0; margin: 0; }
+.boat-rudder__analytics__range-form.boat-rudder__analytics__period-btn--active .boat-rudder__analytics__date-input { border-color: #3800aa; }
+.boat-rudder__analytics__date-input {
+  background: #ffffff; border: 1px solid #e2e2e4; color: #555; font-size: 12px;
+  padding: 4px 8px; border-radius: 2px; width: 120px;
+}
+.boat-rudder__analytics__date-input:focus { outline: none; border-color: #3800aa; color: #1a1a1a; }
+.boat-rudder__analytics__range-sep { color: #999; font-size: 12px; }
+.boat-rudder__analytics__period-current { margin-left: auto; font-size: 12px; color: #888; font-style: italic; }
+
+.boat-rudder__analytics__totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.boat-rudder__analytics__stat-card { background: #f4f4f6; border: 1px solid #e2e2e4; padding: 16px 20px; text-align: center; }
+.boat-rudder__analytics__stat-card--ewml { border-top: 2px solid #bbb; }
+.boat-rudder__analytics__stat-card--e0 { border-top: 2px solid #999; }
+.boat-rudder__analytics__stat-card--e1 { border-top: 2px solid #777; }
+.boat-rudder__analytics__stat-card--e2 { border-top: 2px solid #3800aa; }
+.boat-rudder__analytics__stat-card--e3 { border-top: 2px solid #680072; }
+.boat-rudder__analytics__stat-value { font-size: 28px; font-weight: 700; color: #1a1a1a; line-height: 1; }
+.boat-rudder__analytics__stat-label { font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .8px; margin-top: 6px; }
+
+.boat-rudder__analytics__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.boat-rudder__analytics__table-block { background: #f4f4f6; border: 1px solid #e2e2e4; padding: 16px 18px; }
+.boat-rudder__analytics__table-block--wide { grid-column: 1 / -1; }
+.boat-rudder__analytics__table-title {
+  font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase;
+  letter-spacing: .8px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e2e2e4;
+}
+.boat-rudder__analytics__kv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.boat-rudder__analytics__kv-table td { padding: 5px 4px; border-bottom: 1px solid #eeeeee; vertical-align: middle; }
+.boat-rudder__analytics__kv-table td:first-child { color: #444; word-break: break-all; }
+.boat-rudder__analytics__kv-table td:last-child { text-align: right; color: #680072; font-weight: 700; white-space: nowrap; padding-left: 12px; min-width: 40px; }
+.boat-rudder__analytics__kv-table tr:last-child td { border-bottom: none; }
+.boat-rudder__analytics__bar { display: inline-block; height: 6px; background: #3800aa; border-radius: 1px; margin-left: 8px; vertical-align: middle; min-width: 2px; }
+.boat-rudder__analytics__pct { color: #999; font-size: 11px; }
+
 /*XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 /* RESPONSIVE */
 @media (max-width: 1200px) {

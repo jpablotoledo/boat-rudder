@@ -1693,6 +1693,59 @@ a.boat-rudder__social-network img { border-radius: 4px; flex-shrink: 0; }
 .boat-rudder__theme__item:hover { background: #2a2a2a; color: #fff; }
 .boat-rudder__theme__item--active { color: var(--br-color-navbar-menu-active, #00ffab); font-weight: bold; }
 
+/* ANALYTICS (/dashboard/analytics) */
+.boat-rudder__dashboard__empty { color: #555; font-size: 12px; }
+
+.boat-rudder__analytics__period-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: #0d0d0d; border: 1px solid #1e1e1e; padding: 12px 16px;
+}
+.boat-rudder__analytics__period-label {
+  font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase;
+  letter-spacing: .8px; margin-right: 4px;
+}
+.boat-rudder__analytics__period-btn {
+  display: inline-block; padding: 5px 14px; font-size: 12px; font-weight: 600;
+  background: #111; border: 1px solid #2a2a2a; color: #888; text-decoration: none;
+  border-radius: 2px; transition: all .15s;
+}
+.boat-rudder__analytics__period-btn:hover { background: #1e1e1e; color: #c084fc; border-color: #7b0a74; }
+.boat-rudder__analytics__period-btn--active { background: #7b0a74; border-color: #7b0a74; color: #fff; }
+.boat-rudder__analytics__range-form { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: none; padding: 0; margin: 0; }
+.boat-rudder__analytics__range-form.boat-rudder__analytics__period-btn--active .boat-rudder__analytics__date-input { border-color: #7b0a74; }
+.boat-rudder__analytics__date-input {
+  background: #111; border: 1px solid #2a2a2a; color: #aaa; font-size: 12px;
+  padding: 4px 8px; border-radius: 2px; width: 120px;
+}
+.boat-rudder__analytics__date-input:focus { outline: none; border-color: #7b0a74; color: #fff; }
+.boat-rudder__analytics__range-sep { color: #444; font-size: 12px; }
+.boat-rudder__analytics__period-current { margin-left: auto; font-size: 12px; color: #666; font-style: italic; }
+
+.boat-rudder__analytics__totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.boat-rudder__analytics__stat-card { background: #0d0d0d; border: 1px solid #1e1e1e; padding: 16px 20px; text-align: center; }
+.boat-rudder__analytics__stat-card--ewml { border-top: 2px solid #444; }
+.boat-rudder__analytics__stat-card--e0 { border-top: 2px solid #666; }
+.boat-rudder__analytics__stat-card--e1 { border-top: 2px solid #888; }
+.boat-rudder__analytics__stat-card--e2 { border-top: 2px solid #7b0a74; }
+.boat-rudder__analytics__stat-card--e3 { border-top: 2px solid #c084fc; }
+.boat-rudder__analytics__stat-value { font-size: 28px; font-weight: 700; color: #e0e0e0; line-height: 1; }
+.boat-rudder__analytics__stat-label { font-size: 10px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .8px; margin-top: 6px; }
+
+.boat-rudder__analytics__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.boat-rudder__analytics__table-block { background: #0d0d0d; border: 1px solid #1e1e1e; padding: 16px 18px; }
+.boat-rudder__analytics__table-block--wide { grid-column: 1 / -1; }
+.boat-rudder__analytics__table-title {
+  font-size: 11px; font-weight: 700; color: #666; text-transform: uppercase;
+  letter-spacing: .8px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #1a1a1a;
+}
+.boat-rudder__analytics__kv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.boat-rudder__analytics__kv-table td { padding: 5px 4px; border-bottom: 1px solid #141414; vertical-align: middle; }
+.boat-rudder__analytics__kv-table td:first-child { color: #bbb; word-break: break-all; }
+.boat-rudder__analytics__kv-table td:last-child { text-align: right; color: #c084fc; font-weight: 700; white-space: nowrap; padding-left: 12px; min-width: 40px; }
+.boat-rudder__analytics__kv-table tr:last-child td { border-bottom: none; }
+.boat-rudder__analytics__bar { display: inline-block; height: 6px; background: #7b0a74; border-radius: 1px; margin-left: 8px; vertical-align: middle; min-width: 2px; }
+.boat-rudder__analytics__pct { color: #555; font-size: 11px; }
+
 /*XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 /* RESPONSIVE */
 @media (max-width: 1200px) {

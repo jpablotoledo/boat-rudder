@@ -19,6 +19,8 @@
 #include "../db/mongodb_manager.h"
 #include "../db/session_manager.h"
 #include "../html_builder/orchestrator.h"
+#include "../modules/analytics/analytics.h"
+#include "../modules/analytics_view/analytics_view.h"
 #include "../modules/blog_list/blog_list.h"
 #include "../modules/category_menu/category_menu.h"
 #include "../modules/categories_admin/categories_admin.h"
@@ -887,6 +889,14 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
         strncpy(content_lang, request_lang(), sizeof(content_lang) - 1);
         content_lang[sizeof(content_lang) - 1] = '\0';
 
+        // Record the visit for /dashboard/analytics (no-op for bots, static
+        // assets and /dashboard itself - see analytics_track_visit()'s own
+        // filtering). resolve_epoch() is cheap and pure, so calling it again
+        // here for tracking is fine even though every route handler below
+        // calls it a second time for its own use.
+        analytics_track_visit(req.method, decoded_url, get_header_value(&req, "User-Agent"),
+                               client_ip, resolve_epoch(&req));
+
         char id[32];
         char block_id[32];
         char theme_epoch_str[8];
@@ -1304,6 +1314,31 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                     if (require_admin_session(ctx, &req, epoch, user_id)) {
                         char *content  = users_admin_list(epoch, NULL);
                         char *body     = buildPageWebSite(epoch, "Boat Rudder - Dashboard", content);
+                        char *response = body ? build_epoch_response(body, "", epoch) : NULL;
+                        free(body);
+                        send_or_error(ctx, response, req.method, epoch);
+                    }
+                }
+
+            } else if (strcmp(decoded_url, "/dashboard/analytics") == 0) {
+                int epoch = resolve_epoch(&req);
+
+                if (epoch != EPOCH_MODERN) {
+                    char *response = build_redirect_response("/dashboard", "", epoch);
+                    send_or_error(ctx, response, req.method, epoch);
+                } else {
+                    char user_id[USER_ID_HEX_BUF_SIZE];
+                    if (require_admin_session(ctx, &req, epoch, user_id)) {
+                        const char *period = get_query_param(params, param_count, "period");
+                        const char *date   = get_query_param(params, param_count, "date");
+                        const char *from   = get_query_param(params, param_count, "from");
+                        const char *to     = get_query_param(params, param_count, "to");
+                        int year  = atoi(get_query_param(params, param_count, "year"));
+                        int month = atoi(get_query_param(params, param_count, "month"));
+                        int week  = atoi(get_query_param(params, param_count, "week"));
+
+                        char *content  = analytics_view(epoch, period, year, month, week, date, from, to);
+                        char *body     = content ? buildPageWebSite(epoch, "Boat Rudder - Dashboard", content) : NULL;
                         char *response = body ? build_epoch_response(body, "", epoch) : NULL;
                         free(body);
                         send_or_error(ctx, response, req.method, epoch);

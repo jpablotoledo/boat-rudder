@@ -61,6 +61,7 @@ set(SOURCES
     src/utils/request_theme.c
     src/utils/theme_catalog.c
     src/utils/request_user.c
+    src/utils/ua_parser.c
 
     # Retro-compatible CMS: HTML builder
     src/html_builder/orchestrator.c
@@ -85,6 +86,8 @@ set(SOURCES
     src/modules/media_admin/media_admin.c
     src/modules/site_settings_admin/site_settings_admin.c
     src/modules/fonts_admin/fonts_admin.c
+    src/modules/analytics/analytics.c
+    src/modules/analytics_view/analytics_view.c
 
     # Web server utilities (multipart)
     src/web_server/utils/multipart_parser.c

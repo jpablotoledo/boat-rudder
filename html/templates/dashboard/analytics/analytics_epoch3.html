@@ -1,0 +1,74 @@
+<section class="boat-rudder__dashboard">
+  <h1>Analytics</h1>
+
+  <div class="boat-rudder__analytics__period-bar">
+    <span class="boat-rudder__analytics__period-label">Period:</span>
+    <a href="/dashboard/analytics?period=day&amp;date=%s" class="boat-rudder__analytics__period-btn %s">Day</a>
+    <a href="/dashboard/analytics?period=week&amp;year=%d&amp;week=%d" class="boat-rudder__analytics__period-btn %s">Week</a>
+    <a href="/dashboard/analytics?period=month&amp;year=%d&amp;month=%d" class="boat-rudder__analytics__period-btn %s">Month</a>
+    <a href="/dashboard/analytics?period=year&amp;year=%d" class="boat-rudder__analytics__period-btn %s">Year</a>
+    <a href="/dashboard/analytics?period=year&amp;year=%d" class="boat-rudder__analytics__period-btn %s">Last Year</a>
+    <a href="/dashboard/analytics?period=all" class="boat-rudder__analytics__period-btn %s">All Time</a>
+    <form method="get" action="/dashboard/analytics" class="boat-rudder__analytics__range-form %s">
+      <input type="hidden" name="period" value="range">
+      <input type="date" name="from" class="boat-rudder__analytics__date-input" value="%s">
+      <span class="boat-rudder__analytics__range-sep">&#8594;</span>
+      <input type="date" name="to" class="boat-rudder__analytics__date-input" value="%s">
+      <button type="submit" class="boat-rudder__analytics__period-btn">Go</button>
+    </form>
+    <span class="boat-rudder__analytics__period-current">%s</span>
+  </div>
+
+  <div class="boat-rudder__analytics__totals">
+    <div class="boat-rudder__analytics__stat-card">
+      <div class="boat-rudder__analytics__stat-value">%d</div>
+      <div class="boat-rudder__analytics__stat-label">Total Visits</div>
+    </div>
+    <div class="boat-rudder__analytics__stat-card boat-rudder__analytics__stat-card--ewml">
+      <div class="boat-rudder__analytics__stat-value">%d</div>
+      <div class="boat-rudder__analytics__stat-label">Epoch WML (WAP)</div>
+    </div>
+    <div class="boat-rudder__analytics__stat-card boat-rudder__analytics__stat-card--e0">
+      <div class="boat-rudder__analytics__stat-value">%d</div>
+      <div class="boat-rudder__analytics__stat-label">Epoch 0 (Pre-standard)</div>
+    </div>
+    <div class="boat-rudder__analytics__stat-card boat-rudder__analytics__stat-card--e1">
+      <div class="boat-rudder__analytics__stat-value">%d</div>
+      <div class="boat-rudder__analytics__stat-label">Epoch 1 (Early)</div>
+    </div>
+    <div class="boat-rudder__analytics__stat-card boat-rudder__analytics__stat-card--e2">
+      <div class="boat-rudder__analytics__stat-value">%d</div>
+      <div class="boat-rudder__analytics__stat-label">Epoch 2 (Middle)</div>
+    </div>
+    <div class="boat-rudder__analytics__stat-card boat-rudder__analytics__stat-card--e3">
+      <div class="boat-rudder__analytics__stat-value">%d</div>
+      <div class="boat-rudder__analytics__stat-label">Epoch 3 (Modern)</div>
+    </div>
+  </div>
+
+  <div class="boat-rudder__analytics__grid">
+    <div class="boat-rudder__analytics__table-block">
+      <div class="boat-rudder__analytics__table-title">Routes</div>
+      %s
+    </div>
+    <div class="boat-rudder__analytics__table-block">
+      <div class="boat-rudder__analytics__table-title">Browsers</div>
+      %s
+    </div>
+    <div class="boat-rudder__analytics__table-block">
+      <div class="boat-rudder__analytics__table-title">Operating Systems</div>
+      %s
+    </div>
+    <div class="boat-rudder__analytics__table-block">
+      <div class="boat-rudder__analytics__table-title">Countries</div>
+      %s
+    </div>
+  </div>
+
+  <div class="boat-rudder__analytics__table-block boat-rudder__analytics__table-block--wide">
+    <div class="boat-rudder__analytics__table-title">Top Articles &amp; Categories</div>
+    %s
+  </div>
+
+  <p><a href="/dashboard">Back to dashboard</a></p>
+</section>
