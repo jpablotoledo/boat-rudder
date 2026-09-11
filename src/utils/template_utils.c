@@ -86,6 +86,13 @@ char *slugify(const char *name) {
     return slug;
 }
 
+char *capitalize_first(const char *s) {
+    if (!s) return NULL;
+    char *out = strdup(s);
+    if (out && out[0] >= 'a' && out[0] <= 'z') out[0] = (char)(out[0] - 32);
+    return out;
+}
+
 char *image_url_variant(const char *url, const char *suffix) {
     if (!url || !url[0]) return strdup("");
     if (!suffix || !suffix[0]) return strdup(url);

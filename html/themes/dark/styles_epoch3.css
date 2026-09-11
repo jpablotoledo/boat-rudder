@@ -1364,16 +1364,20 @@ h6.boat-rudder__entry-editor__preview__title { font-size: 13px; font-weight: 600
 /* ── Category sub-menu ── */
 .boat-rudder__navbar__category_item {
   padding: 6px;
-  border-right: 1px solid #fff;
-  color: #fff;
+  border-right: 1px solid var(--br-color-navbar-menu-normal, #ffffff);
+  color: var(--br-color-navbar-menu-normal, #ffffff);
 }
 
 .boat-rudder__navbar__category_item a {
-  color: #fff;
+  color: var(--br-color-navbar-menu-normal, #ffffff);
+}
+
+.boat-rudder__navbar__category_item a:hover {
+  color: var(--br-color-navbar-menu-hover, #98ffdd);
 }
 
 .boat-rudder__navbar__category_item--selected a {
-  color: #56e9fd;
+  color: var(--br-color-navbar-menu-active, #00ffab);
 }
 
 .boat-rudder__navbar__category_item:last-child {

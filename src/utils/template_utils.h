@@ -30,4 +30,12 @@ char *image_url_variant(const char *url, const char *suffix);
 // removed. e.g. "Operating Systems" -> "operating-systems". NULL on failure.
 char *slugify(const char *name);
 
+// Returns a new malloc'd copy of `s` with its first byte uppercased if it is
+// a lowercase ASCII letter - every theme key in this codebase is a plain
+// lowercase slug ("dark", "light"), so this is all that's needed to display
+// it as "Dark"/"Light" on epoch 1/2 (no stylesheet there for a
+// text-transform: capitalize the way epoch 3 gets it - see
+// styles_epoch3.css). NULL on failure.
+char *capitalize_first(const char *s);
+
 #endif // TEMPLATE_UTILS_H

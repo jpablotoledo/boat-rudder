@@ -58,14 +58,21 @@ char *theme_page(int epoch, const char *return_url) {
             ? (is_active ? " boat-rudder__theme__item--active" : "")
             : (is_active ? " class=\"br-theme__item--active\"" : "");
 
+        // The href/key stays the raw lowercase slug; only the reader-facing
+        // label is capitalized (epoch 3 gets this for free from
+        // styles_epoch3.css's text-transform: capitalize instead).
+        char *display = capitalize_first(keys[i]);
+        const char *label = display ? display : keys[i];
+
         char *item;
         if (direct_link) {
             char href[600];
             snprintf(href, sizeof(href), "%s%stheme=%s", safe_return, sep, keys[i]);
-            item = render_template(item_tpl, active_attr, href, keys[i]);
+            item = render_template(item_tpl, active_attr, href, label);
         } else {
-            item = render_template(item_tpl, active_attr, keys[i], return_enc, keys[i]);
+            item = render_template(item_tpl, active_attr, keys[i], return_enc, label);
         }
+        free(display);
         items = item ? str_append(items, item) : NULL;
         free(item);
     }

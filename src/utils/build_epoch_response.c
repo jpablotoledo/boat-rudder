@@ -3,6 +3,7 @@
 #include "generate_url_theme.h"
 #include "read_file.h"
 #include "request_lang.h"
+#include "request_theme.h"
 #include "template_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,19 +81,25 @@ static char *utf8_to_latin1(const char *utf8) {
 }
 
 // Epoch 0/1 (and WML) have no way to remember a language choice across a
-// click: there is no redirect-safe way to set a cookie for them (see
-// request_lang.h / language_page.c - HTTP/1.0-era clients choke on a
-// redirect's Location unless it happens to be a full absolute URI, which a
-// same-origin app cannot always supply). So instead of threading "?lang=xx"
-// through every module that ever builds a link - menu, categories, blog
-// list, galleries, pagination... - every site-relative href in the finished
-// page gets it stitched on right here, in the one place every one of those
-// pages passes through before going out. "Site-relative" means it starts
-// with a single '/' - "//host/..." (protocol-relative), "http(s)://...",
-// "mailto:", "javascript:" and "#fragment" links are left alone.
-static char *inject_lang_into_links(const char *html, const char *lang) {
-    size_t lang_len = strlen(lang);
-    size_t extra_per_link = lang_len + 10; // worst case: "&amp;lang=" + code
+// click, and epoch 1/2 have no reliable way to remember a theme choice
+// either (Max-Age-only cookies - see http_router.c's /language/set and
+// /theme/set - are silently dropped or session-only on real HTTP/1.0-era
+// clients, and epoch 1's redirect-based /set routes are skipped entirely in
+// favor of a direct "?lang=xx"/"?theme=xx" link for the same reason - see
+// language_page.c/theme_page.c). So instead of threading "?lang=xx"/
+// "?theme=xx" through every module that ever builds a link - menu,
+// categories, blog list, galleries, pagination... - every site-relative
+// href in the finished page gets it stitched on right here, in the one
+// place every one of those pages passes through before going out.
+// "Site-relative" means it starts with a single '/' - "//host/..."
+// (protocol-relative), "http(s)://...", "mailto:", "javascript:" and
+// "#fragment" links are left alone. A link that already carries this param
+// (e.g. epoch 1's own direct "?lang=xx"/"?theme=xx" switch links) is left
+// untouched rather than double-tagged.
+static char *inject_query_param_into_links(const char *html, const char *param, const char *value) {
+    size_t param_len = strlen(param);
+    size_t value_len = strlen(value);
+    size_t extra_per_link = 5 + param_len + 1 + value_len; // worst case: "&amp;" + param + "=" + value
 
     size_t link_count = 0;
     for (const char *p = html; (p = strstr(p, "href=\"")) != NULL; p += 6) link_count++;
@@ -100,6 +107,9 @@ static char *inject_lang_into_links(const char *html, const char *lang) {
 
     char *out = malloc(strlen(html) + link_count * extra_per_link + 1);
     if (!out) return NULL;
+
+    char tag[64];
+    snprintf(tag, sizeof(tag), "%s=", param);
 
     char *w = out;
     const char *p = html;
@@ -136,7 +146,7 @@ static char *inject_lang_into_links(const char *html, const char *lang) {
 
         int is_site_relative = val_len >= 1 && val_start[0] == '/' &&
                                (val_len == 1 || val_start[1] != '/');
-        int already_tagged = strstr(valbuf, "lang=") != NULL;
+        int already_tagged = strstr(valbuf, tag) != NULL;
 
         if (is_site_relative && !already_tagged) {
             // An href attribute is XML/HTML text content: a bare '&' is
@@ -149,10 +159,11 @@ static char *inject_lang_into_links(const char *html, const char *lang) {
             } else {
                 *w++ = '?';
             }
-            memcpy(w, "lang=", 5);
-            w += 5;
-            memcpy(w, lang, lang_len);
-            w += lang_len;
+            memcpy(w, param, param_len);
+            w += param_len;
+            *w++ = '=';
+            memcpy(w, value, value_len);
+            w += value_len;
         }
 
         *w++ = '"';
@@ -219,9 +230,13 @@ static char *wml_strip_lists(const char *html) {
     return out;
 }
 
-// Epoch 0/1/WML fixups in one place. The language-preserving link rewrite
-// applies to all three - none of them can carry a cookie through a redirect
-// (see request_lang.h). The Latin-1 transcode is narrower: only epoch 1
+// Epoch 0/1/WML/2 fixups in one place. The language-preserving link rewrite
+// applies to epoch 0/1/WML - none of them can carry a cookie through a
+// redirect (see request_lang.h). The theme-preserving rewrite applies to
+// epoch 1/2 - both have the same Max-Age-cookie problem for a theme choice
+// (see request_theme.h/http_router.c's /theme/set), epoch 0/WML skip it
+// simply because neither offers a theme control at all (see menu.c's
+// theme_selector()). The Latin-1 transcode is narrower still: only epoch 1
 // (Mosaic-era GUI browsers) and WML actually predate UTF-8; epoch 0's real
 // audience is a modern terminal browser in a UTF-8 locale; see
 // content_type_for_epoch() and qr_generator.c's ASCII-vs-half-block QR
@@ -230,10 +245,20 @@ static char *wml_strip_lists(const char *html) {
 // Returns a fresh allocation, or NULL only when nothing needed changing
 // (the caller keeps using its original body).
 static char *retrofit_body_for_epoch(const char *body, int epoch) {
-    if (epoch > EPOCH_EARLY) return NULL;
+    if (epoch > EPOCH_MIDDLE) return NULL;
 
-    char *step = inject_lang_into_links(body, request_lang());
-    const char *cur = step ? step : body;
+    char *step = NULL;
+    const char *cur = body;
+
+    if (epoch <= EPOCH_EARLY) {
+        char *tagged = inject_query_param_into_links(cur, "lang", request_lang());
+        if (tagged) { free(step); step = tagged; cur = step; }
+    }
+
+    if (epoch == EPOCH_EARLY || epoch == EPOCH_MIDDLE) {
+        char *tagged = inject_query_param_into_links(cur, "theme", request_theme());
+        if (tagged) { free(step); step = tagged; cur = step; }
+    }
 
     if (epoch == EPOCH_WML) {
         char *closed = wml_close_br(cur);

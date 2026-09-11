@@ -157,8 +157,12 @@ static char *theme_selector(int epoch) {
     } else {
         // menu-theme_epoch{1,2}.html link to /theme?return=..., a full page
         // listing every theme (theme_page.c) - same shape as
-        // menu-lang_epoch{1,2}.html linking to /language.
-        result = render_template(tpl, return_enc, active);
+        // menu-lang_epoch{1,2}.html linking to /language. No stylesheet
+        // here to capitalize the name the way epoch 3's button does (see
+        // styles_epoch3.css), so it takes a capitalized copy directly.
+        char *display = capitalize_first(active);
+        result = render_template(tpl, return_enc, display ? display : active);
+        free(display);
     }
 
     free(tpl);
