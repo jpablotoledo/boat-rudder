@@ -26,6 +26,13 @@ char *site_settings_general_page(int epoch, const char *site_name, const char *e
 char *site_settings_banner_page(int epoch, const char *key, char *const values[EPOCH_COUNT]);
 char *site_settings_footer_page(int epoch, const char *key, char *const values[EPOCH_COUNT]);
 
+// /dashboard/settings/themes/<key>/logo - same shape as banner/footer above,
+// but only epoch -1/1/2 get a panel: those are the only epochs that render
+// an <img> logo at all (epoch 0 has none; epoch 3's logo is text with its
+// own font picker, not a raw markup field - see
+// site_settings_fonts_page()).
+char *site_settings_logo_page(int epoch, const char *key, char *const values[EPOCH_COUNT]);
+
 // /dashboard/settings/preview - a static control panel (epoch + screen size
 // pickers) driving an iframe of "/" via the ?preview_epoch=<N> override in
 // http_router.c. No dynamic content, so this just loads the epoch3 template

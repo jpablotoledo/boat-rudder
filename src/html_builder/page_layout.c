@@ -1,4 +1,5 @@
 #include "page_layout.h"
+#include "../db/cms_fonts.h"
 #include "../db/cms_themes.h"
 #include "../utils/generate_url_theme.h"
 #include "../utils/read_file.h"
@@ -42,11 +43,34 @@ static char *splice_footer(char *html, int epoch) {
     return result;
 }
 
+// Builds the @font-face + --br-font-navbar-logo override for the active
+// theme's chosen logo font (site_settings_fonts_page()/cms_get_fonts()),
+// or "" if the theme has picked none (styles_epoch3.css's own hardcoded
+// Milonga @font-face, and var(--br-font-navbar-logo, Milonga)'s own
+// fallback, cover that case with no override needed here at all).
+static char *build_logo_font_css(const char *font_name) {
+    if (!font_name || !font_name[0]) return strdup("");
+
+    char *filename = cms_get_font_filename_by_name(font_name);
+    if (!filename || !filename[0]) {
+        free(filename);
+        return strdup("");
+    }
+
+    char *css = render_template(
+        "@font-face{font-family:'%s';src:url('/assets/fonts/%s') format('%s');}"
+        ":root{--br-font-navbar-logo:'%s';}",
+        font_name, filename, cms_font_format_for_filename(filename), font_name);
+    free(filename);
+    return css ? css : strdup("");
+}
+
 // Replaces {{THEME_COLORS}} (epoch 3's layout only - older epochs have no
 // color model, and simply lack the marker, so this is a no-op there) with a
 // small inline <style>:root{...}</style> fragment carrying the active
 // theme's DB-editable color tokens (/dashboard/settings/themes) - the same
-// one shared palette every epoch reads from, per cms_themes.h. Every
+// one shared palette every epoch reads from, per cms_themes.h - plus the
+// theme's chosen logo font, if any (see build_logo_font_css()). Every
 // styles_epoch3.css rule that opts in reads its value via
 // var(--br-color-x, <hardcoded-default>), so a theme with no saved colors
 // renders identically whether or not this marker even exists.
@@ -55,6 +79,10 @@ static char *splice_theme_colors(char *html) {
 
     CmsThemeColors colors;
     cms_get_theme_colors(request_theme(), &colors);
+
+    char *logo_font = cms_get_theme_logo_font(request_theme());
+    char *font_css = build_logo_font_css(logo_font);
+    free(logo_font);
 
     char *style = render_template(
         "<style>:root{"
@@ -66,7 +94,7 @@ static char *splice_theme_colors(char *html) {
         "--br-color-blog-list-item-author:%s;--br-color-blog-list-item-categories:%s;"
         "--br-color-blog-list-item-date:%s;"
         "--br-color-footer-logo:%s;--br-color-footer-logo-background:%s;"
-        "}</style>",
+        "}%s</style>",
         colors.navbar_background, colors.navbar_menu_normal,
         colors.navbar_menu_hover, colors.navbar_menu_active,
         colors.navbar_logo, colors.body_background,
@@ -74,7 +102,9 @@ static char *splice_theme_colors(char *html) {
         colors.blog_list_item_background, colors.blog_list_item_border,
         colors.blog_list_item_author, colors.blog_list_item_categories,
         colors.blog_list_item_date,
-        colors.footer_logo, colors.footer_logo_background);
+        colors.footer_logo, colors.footer_logo_background,
+        font_css ? font_css : "");
+    free(font_css);
 
     char *result = str_replace_first(html, "{{THEME_COLORS}}", style ? style : "");
     free(style);
@@ -87,18 +117,22 @@ static char *splice_theme_colors(char *html) {
 // epoch -1/0 have no color model, so those layouts simply lack these
 // markers and this is a no-op) with plain hex values from the *same*
 // cms_get_theme_colors() epoch 3 reads - one shared palette, not a
-// separate one per epoch (see cms_themes.h). Epoch 1/2 have no CSS custom
-// properties (epoch 1: no CSS at all; epoch 2's inline <style> predates
-// CSS3 variables), so colors go straight into HTML attributes
+// separate one per epoch (see cms_themes.h), with exactly one exception:
+// {{COLOR_BACKGROUND}} on epoch 1 takes body_background_epoch1 instead of
+// body_background, since a freely-picked color can render dithered rather
+// than solid on the indexed-color displays epoch 1's real browsers predate
+// (see cms_themes.h's own doc comment on that field). Epoch 1/2 have no CSS
+// custom properties (epoch 1: no CSS at all; epoch 2's inline <style>
+// predates CSS3 variables), so colors go straight into HTML attributes
 // (bgcolor/text/link/vlink) as substituted text, not injected CSS. There
 // is no epoch 1/2 concept of "hover"/"active" menu states, so
 // {{COLOR_ACCENT}} (link/vlink - appears twice per layout, hence two
 // passes below) uses navbar-menu-normal, the closest of the 13 tokens to
-// a generic link color; {{COLOR_BACKGROUND}}/{{COLOR_TEXT}} use
-// body-background/home-content-text (body text has no dedicated token of
-// its own in the Figma palette - home-content-text is the closest match,
-// being the main visible text color on these epochs' pages).
-static char *splice_retro_colors(char *html) {
+// a generic link color; {{COLOR_TEXT}} uses home-content-text (body text
+// has no dedicated token of its own in the Figma palette - home-content-
+// text is the closest match, being the main visible text color on these
+// epochs' pages).
+static char *splice_retro_colors(char *html, int epoch) {
     if (!html) return NULL;
     if (!strstr(html, "{{COLOR_BACKGROUND}}") && !strstr(html, "{{COLOR_TEXT}}") &&
         !strstr(html, "{{COLOR_ACCENT}}"))
@@ -107,7 +141,10 @@ static char *splice_retro_colors(char *html) {
     CmsThemeColors colors;
     cms_get_theme_colors(request_theme(), &colors);
 
-    char *step = str_replace_first(html, "{{COLOR_BACKGROUND}}", colors.body_background);
+    const char *background = (epoch == EPOCH_EARLY) ? colors.body_background_epoch1
+                                                      : colors.body_background;
+
+    char *step = str_replace_first(html, "{{COLOR_BACKGROUND}}", background);
     free(html);
     if (!step) return NULL;
 
@@ -160,7 +197,7 @@ char *page_layout_wrap(char *fragment_html, const char *page_title, int epoch,
         return NULL;
     }
 
-    char *with_retro_colors = splice_retro_colors(with_bg);
+    char *with_retro_colors = splice_retro_colors(with_bg, epoch);
     if (!with_retro_colors) {
         free(fragment_html);
         return NULL;

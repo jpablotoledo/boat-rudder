@@ -47,7 +47,21 @@ typedef struct {
     char blog_list_item_date[8];        // blog listing card byline date
     char footer_logo[8];                // footer bar "Boat Rudder" text color (epoch 3 only)
     char footer_logo_background[10];    // "#rrggbb[aa]" - footer bar background behind that text (epoch 3 only)
+    char body_background_epoch1[8];     // page body background, epoch 1 only - see below
 } CmsThemeColors;
+
+// body_background_epoch1 is the one deliberate exception to "one shared
+// palette, not a separate one per epoch": a color picked freely can fall
+// outside what a real epoch-1-era display can show as a flat fill - shown
+// on an indexed-color (e.g. 8-bit/256-color) screen, an unmatched color
+// gets dithered into a pattern of pixels instead of rendering solid (seen
+// live comparing NCSA Mosaic against Internet Explorer 3 on the same
+// theme). This lets epoch 1's <body bgcolor> take an independent value -
+// normally one of the 16 VGA-safe colors the admin form's palette offers,
+// guaranteed flat on any indexed display - without touching body-background
+// itself, which epoch 2/3 keep using unchanged. Defaults to the same value
+// as body_background (see cms_themes.c's THEME_DEFAULTS), so an unedited
+// theme renders identically to before this field existed.
 
 // db.themes.findOne({key}). Fills `out` with the stored colors, or with
 // epoch 3's own hardcoded styles_epoch3.css values (see cms_themes.c) if
@@ -80,6 +94,15 @@ int cms_update_theme_colors(const char *key, const CmsThemeColors *colors);
 char *cms_get_theme_banner(const char *key, int epoch);
 char *cms_get_theme_footer(const char *key, int epoch);
 
+// The navbar logo, same "" (unset) falls back to that theme's own on-disk
+// file (menu/menu-logo_epoch<N>.html via generate_url_theme()) convention -
+// but only meaningful for epoch -1/1/2, the epochs that actually render an
+// <img> logo (epoch 0 has no logo at all; epoch 3's logo is text with its
+// own font picker instead - see cms_get_theme_logo_font()). Callers outside
+// that range still work (an empty on-disk fallback), there's just nothing
+// to show.
+char *cms_get_theme_logo(const char *key, int epoch);
+
 // The *stored* value only ("" if unset - not file-resolved), one per
 // epoch (index via epoch_to_index()), for the admin form: it needs to
 // tell "nothing saved" apart from "saved text that happens to equal the
@@ -87,6 +110,7 @@ char *cms_get_theme_footer(const char *key, int epoch);
 // filled with a malloc'd string the caller must free.
 void cms_get_theme_banner_values(const char *key, char *out_values[EPOCH_COUNT]);
 void cms_get_theme_footer_values(const char *key, char *out_values[EPOCH_COUNT]);
+void cms_get_theme_logo_values(const char *key, char *out_values[EPOCH_COUNT]);
 
 // db.themes.updateOne({key}, {$set: {"banner_html.<field for epoch>": html}},
 // {upsert: true}). Returns 0 on success, -1 if epoch is outside -1..3, on
@@ -94,6 +118,20 @@ void cms_get_theme_footer_values(const char *key, char *out_values[EPOCH_COUNT])
 // epoch back to the theme's on-disk default.
 int cms_update_theme_banner(const char *key, int epoch, const char *html);
 int cms_update_theme_footer(const char *key, int epoch, const char *html);
+int cms_update_theme_logo(const char *key, int epoch, const char *html);
+
+// The theme's chosen font-family for the epoch 3 navbar logo text (the
+// site name) - "" (unset) keeps the hardcoded default (Milonga - see
+// styles_epoch3.css). Fonts themselves are uploaded/managed globally via
+// /dashboard/settings/fonts (see cms_fonts.h), not scoped per theme; each
+// theme only stores the *name* of the one it picked. Always returns a
+// malloc'd string, "" on a DB error or if mongodb is not ready.
+char *cms_get_theme_logo_font(const char *key);
+
+// db.themes.updateOne({key}, {$set: {logo_font: font_name}}, {upsert: true}).
+// An empty `font_name` clears the override back to the hardcoded default.
+// Returns 0 on success, -1 on a DB error or if mongodb is not ready.
+int cms_update_theme_logo_font(const char *key, const char *font_name);
 
 // Splits a stored "#rrggbb" or "#rrggbbaa" background value into its opaque
 // 7-char hex ("#rrggbb", for an <input type="color"> value - that control

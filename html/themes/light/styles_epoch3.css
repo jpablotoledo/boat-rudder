@@ -70,7 +70,7 @@ h2 {
 }
 
 .boat-rudder__navbar__title {
-  font-family: Milonga, Georgia, serif;;
+  font-family: var(--br-font-navbar-logo, Milonga), Georgia, serif;
   transition: all 1s;
   padding: 20px;
   font-size: 28px;
@@ -347,19 +347,76 @@ h2 {
   flex-wrap: wrap;
 }
 
-.boat-rudder__dashboard__color-alpha__range {
-  width: 120px;
+/* One self-contained color picker: a swatch button that opens a popover
+   holding the native <input type="color">, the VGA 16-color palette and
+   (for backgrounds) the opacity slider - see settings-themes_epoch3.html's
+   buildColorField(). */
+.boat-rudder__dashboard__color-field {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
 }
 
-.boat-rudder__dashboard__color-alpha__preview {
+.boat-rudder__dashboard__color-trigger {
   --boat-rudder-preview-color: transparent;
   display: inline-block;
   width: 28px;
   height: 28px;
+  padding: 0;
   border: 1px solid #2a9d8f;
+  cursor: pointer;
   background-image: linear-gradient(var(--boat-rudder-preview-color), var(--boat-rudder-preview-color)),
                      repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%);
   background-size: 100% 100%, 8px 8px;
+}
+
+.boat-rudder__dashboard__color-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 180px;
+  padding: 10px;
+  background-color: #ffffff;
+  border: 1px solid #2a9d8f;
+}
+
+.boat-rudder__dashboard__color-popover[hidden] {
+  display: none;
+}
+
+.boat-rudder__dashboard__color-popover__opacity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.boat-rudder__dashboard__color-popover__opacity input[type="range"] {
+  flex: 1;
+}
+
+.boat-rudder__dashboard__vga-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 160px;
+}
+
+.boat-rudder__dashboard__vga-palette__swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #2a9d8f;
+  cursor: pointer;
+}
+
+.boat-rudder__dashboard__vga-palette__swatch--active {
+  outline: 2px solid #3800aa;
+  outline-offset: 1px;
 }
 
 .boat-rudder__dashboard__theme-badge {

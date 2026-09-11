@@ -294,15 +294,19 @@ char *menu(const char *current_url, int epoch) {
     // latter is the menu *section* and is hardcoded to "/" by
     // buildPageWebSite(), which every login/dashboard/language page goes
     // through - they would all look like home.
+    // cms_get_theme_logo() falls back to the active theme's own on-disk
+    // menu-logo_epoch<N>.html when the DB has no override (same convention
+    // as mainbanner()'s cms_get_theme_banner()), so a fresh install renders
+    // exactly as before this became DB-backed.
     char *logo = strdup("");
     int at_home = strcmp(request_path(), "/") == 0;
     if ((epoch == EPOCH_EARLY || epoch == EPOCH_MIDDLE || epoch == EPOCH_WML) && !at_home) {
-        char *logo_path = generate_url_theme("menu/menu-logo_epoch%d.html", epoch);
-        char *logo_tpl  = logo_path ? read_file_to_string(logo_path) : NULL;
-        free(logo_path);
-        if (logo_tpl) {
+        char *logo_html = cms_get_theme_logo(request_theme(), epoch);
+        if (logo_html && logo_html[0]) {
             free(logo);
-            logo = logo_tpl;
+            logo = logo_html;
+        } else {
+            free(logo_html);
         }
     }
 

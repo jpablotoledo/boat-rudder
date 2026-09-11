@@ -13,6 +13,7 @@
 #include "../db/cms_languages.h"
 #include "../db/cms_menu.h"
 #include "../db/cms_site_settings.h"
+#include "../db/cms_fonts.h"
 #include "../db/cms_themes.h"
 #include "../db/cms_users_admin.h"
 #include "../db/mongodb_manager.h"
@@ -26,6 +27,7 @@
 #include "../modules/entry_editor/entry_editor_blocks.h"
 #include "../modules/entry_page/entry_page.h"
 #include "../modules/error/error.h"
+#include "../modules/fonts_admin/fonts_admin.h"
 #include "../modules/languages_admin/languages_admin.h"
 #include "../modules/language_page/language_page.h"
 #include "../modules/theme_page/theme_page.h"
@@ -319,25 +321,29 @@ static int match_id_route(const char *decoded_url, const char *prefix,
     return 1;
 }
 
-// Theme-asset endpoints (/dashboard/api/theme-assets/*) back the banner and
-// footer editors' image upload/browse widget: they write straight into
-// html/themes/<theme>/assets/<component>/epoch<N>/, the same directories the
-// theme's own mainbanner/footer markup already references - not the content
-// media library (html/content/posts/..., per-author, gallery-oriented).
+// Theme-asset endpoints (/dashboard/api/theme-assets/*) back the banner,
+// footer and logo editors' image upload/browse widget: they write straight
+// into html/themes/<theme>/assets/<component>/epoch<N>/, the same
+// directories the theme's own mainbanner/footer/menu-logo markup already
+// references - not the content media library (html/content/posts/...,
+// per-author, gallery-oriented).
 //
 // `key` is the theme being edited - taken explicitly from the request
 // (query string), never from request_theme() (the admin's own active
-// theme for this request, which need not be the theme whose banner/footer
-// editor is open - see theme-scoped-personalization-plan.md §4).
-// `component` is restricted to the two directories this feature actually
-// uses; `epoch_str` must be one of "-1".."3". Fills dir_out (>= 256 bytes)
-// with "./html/themes/<key>/assets/<component>/epoch<epoch_str>" and
-// returns 1, or returns 0 (dir_out untouched) if any argument is invalid.
+// theme for this request, which need not be the theme whose banner/footer/
+// logo editor is open - see theme-scoped-personalization-plan.md §4).
+// `component` is restricted to the three directories this feature actually
+// uses ("menu" backs the logo editor - see site_settings_logo_page());
+// `epoch_str` must be one of "-1".."3". Fills dir_out (>= 256 bytes) with
+// "./html/themes/<key>/assets/<component>/epoch<epoch_str>" and returns 1,
+// or returns 0 (dir_out untouched) if any argument is invalid.
 static int theme_assets_dir(const char *key, const char *component, const char *epoch_str,
                              char *dir_out, size_t dir_size) {
     if (!theme_key_is_valid(key)) return 0;
     if (!component || !epoch_str) return 0;
-    if (strcmp(component, "mainbanner") != 0 && strcmp(component, "footer") != 0) return 0;
+    if (strcmp(component, "mainbanner") != 0 && strcmp(component, "footer") != 0 &&
+        strcmp(component, "menu") != 0)
+        return 0;
 
     static const char *valid_epochs[] = {"-1", "0", "1", "2", "3"};
     int epoch_ok = 0;
@@ -1175,6 +1181,30 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                     }
                 }
 
+            } else if (match_id_route(decoded_url, "/dashboard/settings/themes", "/logo", id, sizeof(id))) {
+                int epoch = resolve_epoch(&req);
+
+                if (epoch != EPOCH_MODERN) {
+                    char *response = build_redirect_response("/dashboard", "", epoch);
+                    send_or_error(ctx, response, req.method, epoch);
+                } else {
+                    char user_id[USER_ID_HEX_BUF_SIZE];
+                    if (require_admin_session(ctx, &req, epoch, user_id)) {
+                        if (!theme_key_is_valid(id)) {
+                            send_error_response(ctx, 404, "404 Not Found", epoch);
+                        } else {
+                            char *values[EPOCH_COUNT];
+                            cms_get_theme_logo_values(id, values);
+                            char *content  = site_settings_logo_page(epoch, id, values);
+                            char *body     = buildPageWebSite(epoch, "Boat Rudder - Dashboard", content);
+                            char *response = body ? build_epoch_response(body, "", epoch) : NULL;
+                            free(body);
+                            send_or_error(ctx, response, req.method, epoch);
+                            for (int i = 0; i < EPOCH_COUNT; i++) free(values[i]);
+                        }
+                    }
+                }
+
             } else if (strcmp(decoded_url, "/dashboard/settings/preview") == 0) {
                 int epoch = resolve_epoch(&req);
 
@@ -1185,6 +1215,24 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                     char user_id[USER_ID_HEX_BUF_SIZE];
                     if (require_admin_session(ctx, &req, epoch, user_id)) {
                         char *content  = site_settings_preview_page(epoch);
+                        char *body     = buildPageWebSite(epoch, "Boat Rudder - Dashboard", content);
+                        char *response = body ? build_epoch_response(body, "", epoch) : NULL;
+                        free(body);
+                        send_or_error(ctx, response, req.method, epoch);
+                    }
+                }
+
+            } else if (strcmp(decoded_url, "/dashboard/settings/fonts") == 0) {
+                int epoch = resolve_epoch(&req);
+
+                if (epoch != EPOCH_MODERN) {
+                    char *response = build_redirect_response("/dashboard", "", epoch);
+                    send_or_error(ctx, response, req.method, epoch);
+                } else {
+                    char user_id[USER_ID_HEX_BUF_SIZE];
+                    if (require_admin_session(ctx, &req, epoch, user_id)) {
+                        const char *error = get_query_param(params, param_count, "error");
+                        char *content  = fonts_admin_list(epoch, error);
                         char *body     = buildPageWebSite(epoch, "Boat Rudder - Dashboard", content);
                         char *response = body ? build_epoch_response(body, "", epoch) : NULL;
                         free(body);
@@ -2458,6 +2506,9 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                         parse_bg_color_field(req.body, req.body_length, "body-background",
                                              "body-background-alpha",
                                              colors.body_background, sizeof(colors.body_background));
+                        parse_urlencoded_field(req.body, req.body_length, "body-background-epoch1",
+                                                colors.body_background_epoch1,
+                                                sizeof(colors.body_background_epoch1));
                         parse_bg_color_field(req.body, req.body_length, "home-content-background",
                                              "home-content-background-alpha",
                                              colors.home_content_background, sizeof(colors.home_content_background));
@@ -2480,7 +2531,12 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                                              "footer-logo-background-alpha",
                                              colors.footer_logo_background, sizeof(colors.footer_logo_background));
 
+                        char logo_font[128] = "";
+                        parse_urlencoded_field(req.body, req.body_length, "logo-font",
+                                                logo_font, sizeof(logo_font));
+
                         cms_update_theme_colors(id, &colors);
+                        cms_update_theme_logo_font(id, logo_font);
                         char *response = build_redirect_response("/dashboard/settings/themes", "", epoch);
                         send_or_error(ctx, response, req.method, epoch);
                     }
@@ -2533,6 +2589,32 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                         cms_update_theme_footer(id, atoi(theme_epoch_str), html);
                         char redirect_to[128];
                         snprintf(redirect_to, sizeof(redirect_to), "/dashboard/settings/themes/%s/footer", id);
+                        char *response = build_redirect_response(redirect_to, "", epoch);
+                        send_or_error(ctx, response, req.method, epoch);
+                    }
+                }
+            }
+
+        } else if (strcmp(req.method, "POST") == 0 &&
+                   match_theme_epoch_route(decoded_url, "logo", id, sizeof(id),
+                                            theme_epoch_str, sizeof(theme_epoch_str))) {
+            int epoch = resolve_epoch(&req);
+
+            if (epoch != EPOCH_MODERN) {
+                char *response = build_redirect_response("/dashboard", "", epoch);
+                send_or_error(ctx, response, req.method, epoch);
+            } else {
+                char user_id[USER_ID_HEX_BUF_SIZE];
+                if (require_admin_session(ctx, &req, epoch, user_id)) {
+                    if (!theme_key_is_valid(id)) {
+                        send_error_response(ctx, 404, "404 Not Found", epoch);
+                    } else {
+                        char html[8192];
+                        parse_urlencoded_field(req.body, req.body_length, "html", html, sizeof(html));
+
+                        cms_update_theme_logo(id, atoi(theme_epoch_str), html);
+                        char redirect_to[128];
+                        snprintf(redirect_to, sizeof(redirect_to), "/dashboard/settings/themes/%s/logo", id);
                         char *response = build_redirect_response(redirect_to, "", epoch);
                         send_or_error(ctx, response, req.method, epoch);
                     }
@@ -2947,6 +3029,104 @@ void http_route(read_func_t read_func, void *ctx, const char *root_directory) {
                             connection_close(ctx);
                         }
                     }
+                }
+            }
+
+        } else if (strcmp(req.method, "POST") == 0 &&
+                   strcmp(decoded_url, "/dashboard/settings/fonts/upload") == 0) {
+            int epoch = resolve_epoch(&req);
+            if (epoch != EPOCH_MODERN) {
+                char *response = build_redirect_response("/dashboard", "", epoch);
+                send_or_error(ctx, response, req.method, epoch);
+            } else {
+                char user_id[USER_ID_HEX_BUF_SIZE];
+                if (require_admin_session(ctx, &req, epoch, user_id)) {
+                    const char *ct = get_header_value(&req, "Content-Type");
+                    MultipartResult *mp = parse_multipart(req.body, req.body_length, ct);
+
+                    const MultipartPart *name_part = mp ? multipart_find(mp, "name") : NULL;
+                    const MultipartPart *file_part = mp ? multipart_find(mp, "file") : NULL;
+
+                    // Font names become both a Mongo document field and a
+                    // literal CSS font-family value (see page_layout.c's
+                    // build_logo_font_css()) - restricted to a plain-text
+                    // whitelist so neither can break out of either context.
+                    char name[81] = "";
+                    if (name_part && name_part->data_len > 0) {
+                        size_t len = name_part->data_len < sizeof(name) - 1
+                            ? name_part->data_len : sizeof(name) - 1;
+                        size_t j = 0;
+                        for (size_t k = 0; k < len; k++) {
+                            char c = name_part->data[k];
+                            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '_')
+                                name[j++] = c;
+                        }
+                        name[j] = '\0';
+                    }
+
+                    char sanitized[256];
+                    int valid_ext = 0;
+                    if (file_part && file_part->filename[0] &&
+                        sanitize_asset_filename(file_part->filename, sanitized, sizeof(sanitized))) {
+                        const char *dot = strrchr(sanitized, '.');
+                        static const char *allowed[] = {".ttf", ".otf", ".woff", ".woff2"};
+                        for (size_t i = 0; dot && i < sizeof(allowed) / sizeof(allowed[0]); i++)
+                            if (strcasecmp(dot, allowed[i]) == 0) { valid_ext = 1; break; }
+                    }
+
+                    if (!name[0] || !valid_ext) {
+                        char *response = build_redirect_response(
+                            "/dashboard/settings/fonts?error=Name+and+a+.ttf%2F.otf%2F.woff%2F.woff2+file+are+required",
+                            "", epoch);
+                        send_or_error(ctx, response, req.method, epoch);
+                    } else {
+                        mkdir_recursive("./html/assets/fonts");
+
+                        char filepath[512];
+                        snprintf(filepath, sizeof(filepath), "./html/assets/fonts/%s", sanitized);
+
+                        FILE *f = fopen(filepath, "wb");
+                        int write_ok = 0;
+                        if (f) {
+                            write_ok = fwrite(file_part->data, 1, file_part->data_len, f) == file_part->data_len;
+                            fclose(f);
+                        }
+
+                        if (!write_ok) {
+                            char *response = build_redirect_response(
+                                "/dashboard/settings/fonts?error=Could+not+write+font+file", "", epoch);
+                            send_or_error(ctx, response, req.method, epoch);
+                        } else {
+                            cms_add_font(name, sanitized);
+                            LOG_INFO("Font saved: %s (%s)", filepath, name);
+                            char *response = build_redirect_response("/dashboard/settings/fonts", "", epoch);
+                            send_or_error(ctx, response, req.method, epoch);
+                        }
+                    }
+
+                    free_multipart(mp);
+                }
+            }
+
+        } else if (strcmp(req.method, "POST") == 0 &&
+                   match_id_route(decoded_url, "/dashboard/settings/fonts", "/delete", id, sizeof(id))) {
+            int epoch = resolve_epoch(&req);
+            if (epoch != EPOCH_MODERN) {
+                char *response = build_redirect_response("/dashboard", "", epoch);
+                send_or_error(ctx, response, req.method, epoch);
+            } else {
+                char user_id[USER_ID_HEX_BUF_SIZE];
+                if (require_admin_session(ctx, &req, epoch, user_id)) {
+                    char filename[256];
+                    if (cms_get_font_filename(id, filename, sizeof(filename)) && filename[0]) {
+                        char filepath[512];
+                        snprintf(filepath, sizeof(filepath), "./html/assets/fonts/%s", filename);
+                        remove(filepath);
+                    }
+                    cms_delete_font(id);
+                    char *response = build_redirect_response("/dashboard/settings/fonts", "", epoch);
+                    send_or_error(ctx, response, req.method, epoch);
                 }
             }
 

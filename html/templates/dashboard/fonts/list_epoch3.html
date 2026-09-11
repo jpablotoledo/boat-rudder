@@ -1,0 +1,36 @@
+%s
+<section class="boat-rudder__dashboard">
+  <h1>Fonts</h1>
+  <p>Uploaded fonts are available to every theme's "Logo font" picker
+     (<a href="/dashboard/settings/themes">Themes</a>) for the epoch 3 navbar
+     logo text. Accepted formats: .ttf, .otf, .woff, .woff2. The Name
+     column below previews each font in its own face.</p>
+%s
+  <table class="boat-rudder__dashboard__table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>File</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+%s
+    </tbody>
+  </table>
+  <form class="boat-rudder__dashboard__form" method="POST" action="/dashboard/settings/fonts/upload" enctype="multipart/form-data">
+    <div class="boat-rudder__dashboard__form-row">
+      <label for="name">Name (used as the CSS font-family)</label>
+      <input class="boat-rudder__dashboard__input" type="text" id="name" name="name" maxlength="80" required>
+    </div>
+    <div class="boat-rudder__dashboard__form-row">
+      <label for="file">Font file</label>
+      <input class="boat-rudder__dashboard__input" type="file" id="file" name="file"
+             accept=".ttf,.otf,.woff,.woff2" required>
+    </div>
+    <div class="boat-rudder__dashboard__button-container">
+      <button class="boat-rudder__dashboard__button" type="submit">Upload</button>
+    </div>
+  </form>
+  <p><a href="/dashboard/settings">Back to site settings</a></p>
+</section>

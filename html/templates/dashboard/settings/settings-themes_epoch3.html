@@ -8,27 +8,160 @@
 
 <script>
 (function () {
+  // VGA 16-color palette - the standard CGA/EGA/VGA text-mode palette. A
+  // color picked freely (the native <input type="color"> inside the
+  // popover below) can fall outside the 16 colors a real VGA-era display
+  // can show flat: shown on that hardware, anything else gets approximated
+  // by dithering it into a pattern of pixels instead of a solid fill.
+  // Clicking one of these swatches sets the same input to an exact palette
+  // value instead, so epoch 1/2 renders as a clean solid color there.
+  // Purely a convenience shortcut - it writes into the very same input the
+  // native picker does, nothing new to store.
+  var VGA_PALETTE = [
+    ['#000000', 'Black'],        ['#0000AA', 'Blue'],
+    ['#00AA00', 'Green'],        ['#00AAAA', 'Cyan'],
+    ['#AA0000', 'Red'],          ['#AA00AA', 'Magenta'],
+    ['#AA5500', 'Brown'],        ['#AAAAAA', 'Light gray'],
+    ['#555555', 'Dark gray'],    ['#5555FF', 'Light blue'],
+    ['#55FF55', 'Light green'],  ['#55FFFF', 'Light cyan'],
+    ['#FF5555', 'Light red'],    ['#FF55FF', 'Light magenta'],
+    ['#FFFF55', 'Yellow'],       ['#FFFFFF', 'White']
+  ];
+
   function hexToRgb(hex) {
     var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '');
     return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [0, 0, 0];
   }
 
-  function update(widget) {
-    var color = widget.querySelector('.boat-rudder__dashboard__color-alpha__color');
-    var range = widget.querySelector('.boat-rudder__dashboard__color-alpha__range');
-    var preview = widget.querySelector('.boat-rudder__dashboard__color-alpha__preview');
-    if (!color || !range || !preview) return;
-    var rgb = hexToRgb(color.value);
-    var alpha = Number(range.value) / 100;
-    preview.style.setProperty('--boat-rudder-preview-color',
-      'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + alpha + ')');
+  function closeAllPopovers(except) {
+    Array.prototype.slice.call(document.querySelectorAll('.boat-rudder__dashboard__color-popover')).forEach(function (p) {
+      if (p !== except) p.hidden = true;
+    });
   }
 
-  Array.prototype.slice.call(document.querySelectorAll('.boat-rudder__dashboard__color-alpha')).forEach(function (widget) {
-    update(widget);
-    Array.prototype.slice.call(widget.querySelectorAll('input')).forEach(function (input) {
-      input.addEventListener('input', function () { update(widget); });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.boat-rudder__dashboard__color-field')) closeAllPopovers();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeAllPopovers();
+  });
+
+  // Turns one already-existing <input type="color"> (plus its optional
+  // opacity <input type="range">) into a single self-contained picker: a
+  // swatch button that opens a popover holding the native picker (free
+  // custom color), the VGA palette, and - for backgrounds - the opacity
+  // slider, all in the one place instead of spread across the row. Reuses
+  // the very same <input> elements the form already had (just relocates
+  // them in the DOM), so nothing about what gets submitted changes.
+  // `anchor` is the node the new trigger+popover get inserted after.
+  function buildColorField(anchor, colorInput, rangeInput) {
+    var field = document.createElement('div');
+    field.className = 'boat-rudder__dashboard__color-field';
+    anchor.parentNode.insertBefore(field, anchor.nextSibling);
+
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'boat-rudder__dashboard__color-trigger';
+    field.appendChild(trigger);
+
+    var popover = document.createElement('div');
+    popover.className = 'boat-rudder__dashboard__color-popover';
+    popover.hidden = true;
+    field.appendChild(popover);
+
+    popover.appendChild(colorInput);
+
+    var opacityOutput = null;
+    if (rangeInput) {
+      var opacityRow = document.createElement('label');
+      opacityRow.className = 'boat-rudder__dashboard__color-popover__opacity';
+      opacityRow.appendChild(document.createTextNode('Opacity '));
+      opacityRow.appendChild(rangeInput);
+      opacityOutput = document.createElement('output');
+      opacityRow.appendChild(opacityOutput);
+      popover.appendChild(opacityRow);
+    }
+
+    var palette = document.createElement('div');
+    palette.className = 'boat-rudder__dashboard__vga-palette';
+    VGA_PALETTE.forEach(function (entry) {
+      var hex = entry[0], name = entry[1];
+      var sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'boat-rudder__dashboard__vga-palette__swatch';
+      sw.style.backgroundColor = hex;
+      sw.title = name + ' (' + hex + ')';
+      sw.dataset.hex = hex.toLowerCase();
+      sw.addEventListener('click', function () {
+        colorInput.value = hex;
+        colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      palette.appendChild(sw);
     });
+    popover.appendChild(palette);
+
+    function refresh() {
+      var rgb = hexToRgb(colorInput.value);
+      var alphaPct = rangeInput ? Number(rangeInput.value) : 100;
+      trigger.style.setProperty('--boat-rudder-preview-color',
+        'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + (alphaPct / 100) + ')');
+      Array.prototype.slice.call(palette.children).forEach(function (sw) {
+        sw.classList.toggle('boat-rudder__dashboard__vga-palette__swatch--active',
+          sw.dataset.hex === colorInput.value.toLowerCase());
+      });
+      if (opacityOutput) opacityOutput.textContent = rangeInput.value + '%';
+    }
+
+    trigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var willOpen = popover.hidden;
+      closeAllPopovers(willOpen ? popover : null);
+      popover.hidden = !willOpen;
+    });
+    colorInput.addEventListener('input', refresh);
+    if (rangeInput) rangeInput.addEventListener('input', refresh);
+
+    refresh();
+  }
+
+  // Strips the plain-text label wrapping `input` down to just its text
+  // (dropped once the popover carries the actual control), replacing it
+  // with a bare <span> in the same spot so the field's name still reads
+  // before the new trigger button. Returns that span (the insertion point
+  // for buildColorField), or `input` itself if there was no such label.
+  function stripLabel(input) {
+    var label = input.closest('label');
+    if (!label) return input;
+    var span = document.createElement('span');
+    span.textContent = label.textContent.trim() + ' ';
+    label.parentNode.insertBefore(span, label);
+    label.remove(); // detaches `input` too, but it's simply reattached below
+    return span;
+  }
+
+  Array.prototype.slice.call(
+    document.querySelectorAll('.boat-rudder__dashboard__color-alpha')
+  ).forEach(function (widget) {
+    var colorInput = widget.querySelector('.boat-rudder__dashboard__color-alpha__color');
+    var rangeInput = widget.querySelector('.boat-rudder__dashboard__color-alpha__range');
+    var oldPreview = widget.querySelector('.boat-rudder__dashboard__color-alpha__preview');
+    if (!colorInput) return;
+
+    var anchor = stripLabel(colorInput);
+    var rangeLabel = rangeInput ? rangeInput.closest('label') : null;
+    if (rangeLabel) rangeLabel.remove(); // detaches rangeInput too, reattached below
+    if (oldPreview) oldPreview.remove();
+
+    buildColorField(anchor, colorInput, rangeInput);
+  });
+
+  Array.prototype.slice.call(
+    document.querySelectorAll(
+      '.boat-rudder__dashboard__settings-panel input[type="color"]:not(.boat-rudder__dashboard__color-alpha__color)'
+    )
+  ).forEach(function (colorInput) {
+    var anchor = stripLabel(colorInput);
+    buildColorField(anchor, colorInput, null);
   });
 })();
 </script>

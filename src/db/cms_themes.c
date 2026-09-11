@@ -47,6 +47,7 @@ static const ThemeDefaultEntry THEME_DEFAULTS[] = {
             .blog_list_item_date       = "#e68e4e",
             .footer_logo               = "#ffffff",
             .footer_logo_background    = "#000000",
+            .body_background_epoch1    = "#241144",
         },
     },
     // Values from the project's Figma file, "Color palette Light" variable
@@ -69,6 +70,7 @@ static const ThemeDefaultEntry THEME_DEFAULTS[] = {
             .blog_list_item_date       = "#00636a",
             .footer_logo               = "#ffffff",
             .footer_logo_background    = "#000000",
+            .body_background_epoch1    = "#8dd3ff",
         },
     },
 };
@@ -184,6 +186,7 @@ int cms_get_theme_colors(const char *key, CmsThemeColors *out) {
             copy_field(&colors, "blog-list-item-date", out->blog_list_item_date, sizeof(out->blog_list_item_date));
             copy_field(&colors, "footer-logo", out->footer_logo, sizeof(out->footer_logo));
             copy_field(&colors, "footer-logo-background", out->footer_logo_background, sizeof(out->footer_logo_background));
+            copy_field(&colors, "body-background-epoch1", out->body_background_epoch1, sizeof(out->body_background_epoch1));
         }
     }
 
@@ -223,6 +226,7 @@ int cms_update_theme_colors(const char *key, const CmsThemeColors *colors) {
                 "blog-list-item-date", BCON_UTF8(colors->blog_list_item_date),
                 "footer-logo", BCON_UTF8(colors->footer_logo),
                 "footer-logo-background", BCON_UTF8(colors->footer_logo_background),
+                "body-background-epoch1", BCON_UTF8(colors->body_background_epoch1),
             "}",
         "}"
     );
@@ -281,6 +285,15 @@ char *cms_get_theme_footer(const char *key, int epoch) {
     return load_theme_owned_file(key, "layout/footer_epoch%d.html", epoch);
 }
 
+char *cms_get_theme_logo(const char *key, int epoch) {
+    if (epoch_to_index(epoch) < 0) return strdup("");
+
+    char *db_value = stored_epoch_field(key, "logo_html", epoch);
+    if (db_value[0]) return db_value;
+    free(db_value);
+    return load_theme_owned_file(key, "menu/menu-logo_epoch%d.html", epoch);
+}
+
 static void get_stored_values(const char *key, const char *top_field, char *out_values[EPOCH_COUNT]) {
     for (int epoch = -1; epoch <= 3; epoch++)
         out_values[epoch_to_index(epoch)] = stored_epoch_field(key, top_field, epoch);
@@ -292,6 +305,10 @@ void cms_get_theme_banner_values(const char *key, char *out_values[EPOCH_COUNT])
 
 void cms_get_theme_footer_values(const char *key, char *out_values[EPOCH_COUNT]) {
     get_stored_values(key, "footer_html", out_values);
+}
+
+void cms_get_theme_logo_values(const char *key, char *out_values[EPOCH_COUNT]) {
+    get_stored_values(key, "logo_html", out_values);
 }
 
 // Shared by cms_update_theme_banner()/cms_update_theme_footer(): $set
@@ -333,6 +350,59 @@ int cms_update_theme_banner(const char *key, int epoch, const char *html) {
 
 int cms_update_theme_footer(const char *key, int epoch, const char *html) {
     return update_theme_epoch_field(key, "footer_html", epoch, html);
+}
+
+int cms_update_theme_logo(const char *key, int epoch, const char *html) {
+    return update_theme_epoch_field(key, "logo_html", epoch, html);
+}
+
+char *cms_get_theme_logo_font(const char *key) {
+    if (!key || !key[0]) return strdup("");
+
+    mongoc_collection_t *collection = mongodb_manager_get_collection(THEMES_COLLECTION);
+    if (!collection) return strdup("");
+
+    bson_t *query = BCON_NEW("key", BCON_UTF8(key));
+    mongoc_cursor_t *cursor = mongoc_collection_find_with_opts(collection, query, NULL, NULL);
+
+    char *result = NULL;
+    const bson_t *doc;
+    if (mongoc_cursor_next(cursor, &doc)) {
+        bson_iter_t iter;
+        if (bson_iter_init_find(&iter, doc, "logo_font") && BSON_ITER_HOLDS_UTF8(&iter))
+            result = strdup(bson_iter_utf8(&iter, NULL));
+    }
+
+    bson_destroy(query);
+    mongoc_cursor_destroy(cursor);
+    mongoc_collection_destroy(collection);
+    return result ? result : strdup("");
+}
+
+int cms_update_theme_logo_font(const char *key, const char *font_name) {
+    if (!key || !key[0]) return -1;
+
+    mongoc_collection_t *collection = mongodb_manager_get_collection(THEMES_COLLECTION);
+    if (!collection) return -1;
+
+    bson_t *query = BCON_NEW("key", BCON_UTF8(key));
+    bson_t *update = BCON_NEW(
+        "$set", "{",
+            "key", BCON_UTF8(key),
+            "logo_font", BCON_UTF8(font_name ? font_name : ""),
+        "}"
+    );
+    bson_t *opts = BCON_NEW("upsert", BCON_BOOL(true));
+
+    bson_error_t error;
+    bool ok = mongoc_collection_update_one(collection, query, update, opts, NULL, &error);
+    if (!ok) LOG_ERROR("cms_update_theme_logo_font: update failed: %s", error.message);
+
+    bson_destroy(query);
+    bson_destroy(update);
+    bson_destroy(opts);
+    mongoc_collection_destroy(collection);
+    return ok ? 0 : -1;
 }
 
 static int is_hex_digit(char c) {

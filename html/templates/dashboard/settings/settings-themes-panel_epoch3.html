@@ -7,7 +7,12 @@
        no color model, nothing to apply here. Background colors also carry an opacity slider next
        to the picker (100%% = opaque) - browsers' native color picker has no alpha channel of its
        own, so this pairs a slider with a live preview swatch instead; opacity only has any
-       visible effect in epoch 3, since epoch 1/2 have no alpha-transparency concept.</p>
+       visible effect in epoch 3, since epoch 1/2 have no alpha-transparency concept. Every
+       color picker also offers the 16-color VGA palette alongside the free picker - on a
+       real indexed-color (e.g. 8-bit) display, a color outside those 16 renders dithered
+       (a pixel pattern) rather than solid; the "Body background (epoch 1 override)" field
+       lets that one value differ from the shared Background above for exactly that
+       reason.</p>
     <form method="POST" action="/dashboard/settings/themes/%s/colors">
       <fieldset>
         <legend>Navbar</legend>
@@ -20,6 +25,12 @@
         <label>Menu, hover <input type="color" name="navbar-menu-hover" value="%s"></label>
         <label>Menu, active <input type="color" name="navbar-menu-active" value="%s"></label>
         <label>Logo <input type="color" name="navbar-logo" value="%s"></label>
+        <label>Logo font (epoch 3 text logo only)
+          <select name="logo-font">
+            <option value="">Default (Milonga)</option>
+%s
+          </select>
+        </label>
       </fieldset>
       <fieldset>
         <legend>Body</legend>
@@ -28,6 +39,7 @@
           <label>Opacity %% <input type="range" name="body-background-alpha" min="0" max="100" value="%s" class="boat-rudder__dashboard__color-alpha__range"></label>
           <span class="boat-rudder__dashboard__color-alpha__preview"></span>
         </div>
+        <label>Background (epoch 1 override) <input type="color" name="body-background-epoch1" value="%s"></label>
       </fieldset>
       <fieldset>
         <legend>Home content</legend>
@@ -64,5 +76,6 @@
     <ul>
       <li><a href="/dashboard/settings/themes/%s/banner">Edit banner</a></li>
       <li><a href="/dashboard/settings/themes/%s/footer">Edit footer</a></li>
+      <li><a href="/dashboard/settings/themes/%s/logo">Edit logo</a> (epoch -1/1/2 image)</li>
     </ul>
   </section>

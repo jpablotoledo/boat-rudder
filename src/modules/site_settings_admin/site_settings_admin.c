@@ -1,4 +1,5 @@
 #include "site_settings_admin.h"
+#include "../../db/cms_fonts.h"
 #include "../../utils/generate_url_theme.h"
 #include "../../utils/http_utils.h"
 #include "../../utils/read_file.h"
@@ -60,15 +61,33 @@ static const char *EPOCH_LABELS[EPOCH_COUNT] = {
     "Epoch 3 (modern)",
 };
 
-// Shared by site_settings_banner_page()/site_settings_footer_page():
-// `key` is the theme being edited (not necessarily the admin's own active
-// theme - see theme-scoped-personalization-plan.md §4); `settings_segment`
-// is the /dashboard/settings/themes/<key>/<segment>/<epoch> route
-// ("banner"/"footer"); `asset_component` is the theme-assets directory name
-// under html/themes/<key>/assets/ ("mainbanner"/"footer") - the two differ
-// because the on-disk directory predates this feature and keeps its name.
+// Every epoch, for site_settings_banner_page()/site_settings_footer_page():
+// those exist everywhere from WML to modern.
+static const int ALL_ASSET_EPOCHS[] = { -1, 0, 1, 2, 3 };
+#define ALL_ASSET_EPOCHS_COUNT (sizeof(ALL_ASSET_EPOCHS) / sizeof(ALL_ASSET_EPOCHS[0]))
+
+// Epoch -1/1/2 only, for site_settings_logo_page(): those are the only
+// epochs that render an <img> logo at all (see menu.c's menu()) - epoch 0
+// has no logo, epoch 3's is text with its own font picker (see
+// site_settings_fonts_page()/settings-themes-panel_epoch3.html), not a raw
+// per-epoch markup field.
+static const int LOGO_ASSET_EPOCHS[] = { -1, 1, 2 };
+#define LOGO_ASSET_EPOCHS_COUNT (sizeof(LOGO_ASSET_EPOCHS) / sizeof(LOGO_ASSET_EPOCHS[0]))
+
+// Shared by site_settings_banner_page()/site_settings_footer_page()/
+// site_settings_logo_page(): `key` is the theme being edited (not
+// necessarily the admin's own active theme - see
+// theme-scoped-personalization-plan.md §4); `settings_segment` is the
+// /dashboard/settings/themes/<key>/<segment>/<epoch> route
+// ("banner"/"footer"/"logo"); `asset_component` is the theme-assets
+// directory name under html/themes/<key>/assets/ ("mainbanner"/"footer"/
+// "menu") - banner/footer differ from their own segment name because the
+// on-disk directory predates this feature and keeps its name; `epochs`/
+// `epoch_count` is which epochs get a panel at all (not every field makes
+// sense at every epoch - see LOGO_ASSET_EPOCHS above).
 static char *asset_page(int epoch, const char *title, const char *key, const char *settings_segment,
-                         const char *asset_component, char *const values[EPOCH_COUNT]) {
+                         const char *asset_component, char *const values[EPOCH_COUNT],
+                         const int *epochs, size_t epoch_count) {
     char *page_tpl  = load_template("dashboard/settings/settings-asset_epoch%d.html", epoch);
     char *panel_tpl = load_template("dashboard/settings/settings-asset-panel_epoch%d.html", epoch);
 
@@ -78,7 +97,8 @@ static char *asset_page(int epoch, const char *title, const char *key, const cha
     if (!page_tpl || !panel_tpl) goto cleanup;
 
     panels = strdup("");
-    for (int e = -1; panels && e <= 3; e++) {
+    for (size_t ei = 0; panels && ei < epoch_count; ei++) {
+        int e = epochs[ei];
         int i = epoch_to_index(e);
         char epoch_str[4];
         snprintf(epoch_str, sizeof(epoch_str), "%d", e);
@@ -114,11 +134,18 @@ cleanup:
 }
 
 char *site_settings_banner_page(int epoch, const char *key, char *const values[EPOCH_COUNT]) {
-    return asset_page(epoch, "Home banner", key, "banner", "mainbanner", values);
+    return asset_page(epoch, "Home banner", key, "banner", "mainbanner", values,
+                       ALL_ASSET_EPOCHS, ALL_ASSET_EPOCHS_COUNT);
 }
 
 char *site_settings_footer_page(int epoch, const char *key, char *const values[EPOCH_COUNT]) {
-    return asset_page(epoch, "Footer", key, "footer", "footer", values);
+    return asset_page(epoch, "Footer", key, "footer", "footer", values,
+                       ALL_ASSET_EPOCHS, ALL_ASSET_EPOCHS_COUNT);
+}
+
+char *site_settings_logo_page(int epoch, const char *key, char *const values[EPOCH_COUNT]) {
+    return asset_page(epoch, "Logo", key, "logo", "menu", values,
+                       LOGO_ASSET_EPOCHS, LOGO_ASSET_EPOCHS_COUNT);
 }
 
 char *site_settings_preview_page(int epoch) {
@@ -139,6 +166,34 @@ static BgColorForm split_bg(const char *stored) {
     cms_split_hex_alpha(stored, f.rgb, &alpha_pct);
     snprintf(f.alpha, sizeof(f.alpha), "%d", alpha_pct);
     return f;
+}
+
+// <option> list for the "Logo font" <select> (settings-themes-panel_epoch3.
+// html), one per font uploaded via /dashboard/settings/fonts, `selected`
+// (the theme's own cms_get_theme_logo_font()) marked - the "Default
+// (Milonga)" option itself is a hardcoded literal in the template, not
+// built here.
+static char *build_font_options(const char *selected) {
+    CmsFont *fonts = NULL;
+    size_t count = 0;
+    cms_get_fonts(&fonts, &count);
+
+    char *options = strdup("");
+    for (size_t i = 0; options && i < count; i++) {
+        char *encoded = html_encode_alloc(fonts[i].name);
+        if (!encoded) { free(options); options = NULL; break; }
+
+        const char *is_selected = (selected && selected[0] && strcmp(selected, fonts[i].name) == 0)
+            ? " selected" : "";
+        char *option = render_template("            <option value=\"%s\"%s>%s</option>\n",
+                                        encoded, is_selected, encoded);
+        free(encoded);
+        options = option ? str_append(options, option) : NULL;
+        free(option);
+    }
+
+    cms_fonts_free(fonts, count);
+    return options ? options : strdup("");
 }
 
 char *site_settings_themes_page(int epoch, const ThemeEntry *themes, size_t count) {
@@ -167,19 +222,25 @@ char *site_settings_themes_page(int epoch, const ThemeEntry *themes, size_t coun
         BgColorForm blog_item_bg  = split_bg(c->blog_list_item_background);
         BgColorForm footer_bg     = split_bg(c->footer_logo_background);
 
+        char *logo_font = cms_get_theme_logo_font(themes[i].key);
+        char *font_options = build_font_options(logo_font);
+        free(logo_font);
+        if (!font_options) { free(activate); free(panels); panels = NULL; break; }
+
         char *panel = render_template(panel_tpl, themes[i].key,
                                        themes[i].active ? " (active)" : "", activate,
                                        themes[i].key,
                                        navbar_bg.rgb, navbar_bg.alpha, c->navbar_menu_normal,
                                        c->navbar_menu_hover, c->navbar_menu_active,
-                                       c->navbar_logo,
-                                       body_bg.rgb, body_bg.alpha,
+                                       c->navbar_logo, font_options,
+                                       body_bg.rgb, body_bg.alpha, c->body_background_epoch1,
                                        home_bg.rgb, home_bg.alpha, c->home_content_text,
                                        blog_item_bg.rgb, blog_item_bg.alpha, c->blog_list_item_border,
                                        c->blog_list_item_author, c->blog_list_item_categories,
                                        c->blog_list_item_date,
                                        c->footer_logo, footer_bg.rgb, footer_bg.alpha,
-                                       themes[i].key, themes[i].key);
+                                       themes[i].key, themes[i].key, themes[i].key);
+        free(font_options);
         free(activate);
         if (!panel) {
             free(panels);
