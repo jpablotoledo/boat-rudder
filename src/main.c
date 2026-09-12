@@ -2,6 +2,7 @@
 
 #include "db/cms_languages.h"
 #include "db/mongodb_manager.h"
+#include "modules/analytics/geoip.h"
 #include "utils/config_loader.h"
 #include "utils/log.h"
 #include "web_server/server_listener.h"
@@ -106,6 +107,8 @@ int main(int argc, char *argv[]) {
         cms_languages_ensure_seeded();
     }
 
+    geoip_init(GEOIP_DEFAULT_DB_PATH);
+
     signal(SIGINT,  handle_shutdown);
     signal(SIGTERM, handle_shutdown);
     signal(SIGCHLD, sigchld_handler);
@@ -121,6 +124,7 @@ int main(int argc, char *argv[]) {
 
     LOG_INFO("Shutting down...");
     server_stop();
+    geoip_cleanup();
     mongodb_manager_cleanup();
     free(root_directory);
 

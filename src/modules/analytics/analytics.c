@@ -20,6 +20,7 @@
 // Ported from the-retro-center-old's analytics.c, adapted to boat-rudder's
 // route shapes and mongodb_manager.c.
 #include "analytics.h"
+#include "geoip.h"
 #include "../../utils/log.h"
 #include "../../utils/ua_parser.h"
 #include "../../db/mongodb_manager.h"
@@ -183,8 +184,6 @@ static const char *epoch_bucket_name(int epoch) {
 
 void analytics_track_visit(const char *method, const char *url,
                             const char *user_agent, const char *client_ip, int epoch) {
-    (void)client_ip; // reserved for a future GeoIP lookup - see docs/analytics.md
-
     if (!method || strcmp(method, "GET") != 0) return;
     if (!url || !url[0]) return;
     if (should_skip_url(url)) return;
@@ -209,10 +208,9 @@ void analytics_track_visit(const char *method, const char *url,
     mongo_key_sanitize(browser);
     mongo_key_sanitize(os);
 
-    // No GeoIP lookup ported (would need libmaxminddb + a GeoLite2-Country.mmdb
-    // file this project doesn't ship) - every visit buckets under "Unknown"
-    // until/unless a real lookup is wired into client_ip above.
-    const char *country = "Unknown";
+    char country[64];
+    geoip_lookup(client_ip, country, sizeof(country));
+    mongo_key_sanitize(country);
 
     char group[16], slug[256], entry_type[16];
     classify_url(url, group, sizeof(group), slug, sizeof(slug), entry_type, sizeof(entry_type));

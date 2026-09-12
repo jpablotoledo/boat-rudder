@@ -26,6 +26,19 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(MONGOC REQUIRED IMPORTED_TARGET libmongoc-1.0)
 pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
 
+# Optional: MaxMind GeoLite2 for country detection in analytics (src/modules/
+# analytics/geoip.c). Install libmaxminddb-dev and place a GeoLite2-Country.mmdb
+# file at ./data/GeoLite2-Country.mmdb to enable - without it, every visit's
+# country buckets under "Unknown" instead of failing to build.
+pkg_check_modules(MAXMINDDB libmaxminddb)
+if(MAXMINDDB_FOUND)
+    message(STATUS "libmaxminddb found - GeoIP country detection enabled")
+    add_definitions(-DHAVE_MAXMINDDB)
+    include_directories(${MAXMINDDB_INCLUDE_DIRS})
+else()
+    message(STATUS "libmaxminddb not found - GeoIP country detection disabled (every visit shows Unknown)")
+endif()
+
 # ── Sources ───────────────────────────────────────────────────────────────────
 
 set(SOURCES
@@ -87,6 +100,7 @@ set(SOURCES
     src/modules/site_settings_admin/site_settings_admin.c
     src/modules/fonts_admin/fonts_admin.c
     src/modules/analytics/analytics.c
+    src/modules/analytics/geoip.c
     src/modules/analytics_view/analytics_view.c
 
     # Web server utilities (multipart)
@@ -134,5 +148,11 @@ target_link_libraries(boat-rudder
     PkgConfig::SODIUM
     ${QRENCODE_LIBRARY}
 )
+
+# Link libmaxminddb when available (see the pkg_check_modules(MAXMINDDB ...)
+# gate above).
+if(MAXMINDDB_FOUND)
+    target_link_libraries(boat-rudder ${MAXMINDDB_LIBRARIES})
+endif()
 
 install(TARGETS boat-rudder RUNTIME DESTINATION bin)

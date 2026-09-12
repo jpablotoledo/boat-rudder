@@ -1,0 +1,23 @@
+db.routes.aggregate([
+  {
+    $lookup: {
+      from: "translation",
+      localField: "_id",
+      foreignField: "id",
+      as: "traduccion"
+    }
+  },
+  {
+    $unwind: "$traduccion"
+  },
+  {
+    $addFields: {
+      name: "$traduccion.esp" // o "eng" si querés el texto en inglés
+    }
+  },
+  {
+    $project: {
+      traduccion: 0 // opcional: oculta el objeto embebido original
+    }
+  }
+]);
